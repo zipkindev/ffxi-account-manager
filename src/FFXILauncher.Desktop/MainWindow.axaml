@@ -10,7 +10,10 @@
       <StackPanel Spacing="8">
         <TextBlock Text="FFXI Account Manager" Foreground="{DynamicResource ThemeAccentBrush}" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
         <TextBlock Text="Your characters. One place." FontSize="16" Classes="muted" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="16">
         <Button x:Name="VersionButton" Click="ShowReleaseNotes" HorizontalAlignment="Left" Padding="0" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource ThemeMutedBrush}" ToolTip.Tip="View version and major updates" />
+        <Button x:Name="LicensesButton" Content="Licenses &amp; credits" Click="ShowLicenses" Padding="0" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource ThemeMutedBrush}" />
+        </StackPanel>
         <Grid ColumnDefinitions="Auto,*">
           <Image x:Name="VanaDayIcon" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" Stretch="Uniform" />
           <TextBlock Grid.Column="1" x:Name="VanaClockStatus" Classes="muted" TextWrapping="Wrap" ToolTip.Tip="Calculated from your UTC system clock; continues while games are closed. The icon represents the day's element. Zone weather is reported separately by each character's addon." />

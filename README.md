@@ -15,6 +15,12 @@ Windows-first account management and launch automation for Windower and Final Fa
 
 Character stats and weather report once per minute. Session health heartbeats and IPC command checks remain separate, and logout is reported immediately. Offline cards retain their last observation rather than claiming current weather.
 
+## Downloads and requirements
+
+Download the Windows x64 package from this repository’s GitHub Actions build artifacts (GitHub sign-in may be required). Extract the entire package before launching it. The self-contained build does not require a separate .NET installation.
+
+You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
+
 ## Windows setup
 
 Use the self-contained Windows package and keep its libraries beside `FFXILauncher.Desktop.exe`. The protected Windows installation creates a scheduled-task launch shortcut; setup requires administrator consent, while routine launches use the installed task.
@@ -71,3 +77,14 @@ lua tests/test_manager_addon.lua /tmp/ffxi-manager-addon-test/
 Automated checks cover configuration, identity, maintenance policies, IPC authentication/session binding, UI behavior and credential handling. Complete successful Windows login records account/profile/build validation; unattended recovery and scheduled downtime depend on that proof. Recognized login errors stop automation. The latest shutdown cancellation and early-input recovery changes still need live verification. Linux/SteamDeck launch automation and reliable extraction of saved POL account identities remain planned.
 
 Artwork and icon provenance is listed in `src/FFXILauncher.Desktop/Assets/Themes/SOURCES.md` and `Assets/Weather/SOURCES.md`. See [implementation details](docs/IMPLEMENTATION.md) for architecture and remaining work.
+
+## License and distribution
+
+Original code and documentation are licensed under [MIT](LICENSE), copyright 2026 zipkindev and contributors. Keep the license and copyright notice with redistributed copies.
+
+FFXI artwork, game icons and trademarks are excluded from MIT and remain subject to their owners’ terms. Read [the artwork notice](ARTWORK-NOTICE.md) before distributing artwork-inclusive builds: the linked Square Enix policy does not explicitly address desktop bundling. MIT does not grant commercial rights to those assets. This project is independent and is not endorsed by Square Enix.
+
+Dependencies retain their own licenses. [Third-party notices](THIRD-PARTY-NOTICES.md) and full texts in [licenses/](licenses/) are included in Windows packages. Open **Licenses & credits** beneath the app title to read these notices offline.
+
+FINAL FANTASY XI © 2002 - 2020 SQUARE ENIX CO., LTD. All Rights Reserved.
+FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.

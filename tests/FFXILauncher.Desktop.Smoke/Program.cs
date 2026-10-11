@@ -324,6 +324,14 @@ var releaseDialog = configured.OwnedWindows.Single(w => w.Title == "FFXI Account
 if (!releaseDialog.GetLogicalDescendants().OfType<SelectableTextBlock>().Any(t => t.Text!.Contains("## " + AppRelease.Version))) throw new Exception("Version click did not display bundled current release notes.");
 releaseDialog.Close();
 Dispatcher.UIThread.RunJobs();
+configured.FindControl<Button>("LicensesButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var licenseDialog = configured.OwnedWindows.Single(w => w.Title == "Licenses & credits");
+var licenseText = licenseDialog.GetLogicalDescendants().OfType<SelectableTextBlock>().Single().Text!;
+if (!licenseText.Contains("MIT License") || !licenseText.Contains("zipkindev") || !licenseText.Contains("does not license third-party images") || !licenseText.Contains("Avalonia-LICENSE.txt"))
+    throw new Exception("Offline licenses view is missing code, artwork scope or dependency notices.");
+licenseDialog.Close();
+Dispatcher.UIThread.RunJobs();
 if (PlayerText().Contains("Vana’diel:") || configured.FindControl<TextBlock>("VanaClockStatus")!.Text?.Contains("Moon:") != true) throw new Exception("Time and moon must appear once in the shared header.");
 File.Delete(Path.Combine(playerData, "odin_hauplibond.status"));
 File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.state"), playerStatePayload + playerTime + "\n");

@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.1
+
+- Added the MIT code license and separate FFXI artwork/trademark and dependency notices.
+- Added a Licenses & credits view and included license files in Windows packages.
+- Updated distribution and installation guidance in the README.
+
+
 ## 1.0.0
 
 - Account launching: named Windower profiles, per-account Auto login behavior, overlapping POL startup, learned action paths, and recovery when early menu input is missed.

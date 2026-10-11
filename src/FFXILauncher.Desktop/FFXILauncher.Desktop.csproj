@@ -9,6 +9,13 @@
   <ItemGroup><Content Include="Assets/Themes/SOURCES.md" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../CHANGELOG.md" LogicalName="FFXILauncher.ReleaseNotes" /></ItemGroup>
   <ItemGroup>
+    <EmbeddedResource Include="../../LICENSE" LogicalName="FFXILauncher.License" />
+    <EmbeddedResource Include="../../ARTWORK-NOTICE.md" LogicalName="FFXILauncher.ArtworkNotice" />
+    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="FFXILauncher.ThirdPartyNotices" />
+    <Content Include="../../LICENSE;../../ARTWORK-NOTICE.md;../../THIRD-PARTY-NOTICES.md" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="../../licenses/*" Link="licenses/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../FFXILauncher.Core/FFXILauncher.Core.csproj" />
     <PackageReference Include="Avalonia" Version="12.1.2" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.2" />

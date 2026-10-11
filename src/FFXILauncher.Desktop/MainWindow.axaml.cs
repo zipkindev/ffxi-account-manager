@@ -106,11 +106,17 @@ public sealed partial class MainWindow : Window
         SizeChanged += (_, _) => UpdateArtworkLayout();
         Closed += (_, _) => { shutdown.Cancel(); timer.Stop(); calibrationControl?.Dispose(); (autoLogin as IDisposable)?.Dispose(); themeArtwork?.Dispose(); foreach (var bitmap in landscapeArtwork.Values) bitmap.Dispose(); };
     }
-    private async void ShowReleaseNotes(object? sender, RoutedEventArgs args)
+    private async void ShowReleaseNotes(object? sender, RoutedEventArgs args) =>
+        await ShowDocument("FFXI Account Manager · v" + AppRelease.Version, AppRelease.Notes);
+
+    private async void ShowLicenses(object? sender, RoutedEventArgs args) =>
+        await ShowDocument("Licenses & credits", AppRelease.Licenses);
+
+    private async Task ShowDocument(string title, string document)
     {
         var dialog = new Window
         {
-            Title = "FFXI Account Manager · v" + AppRelease.Version,
+            Title = title,
             Width = 700, Height = 560, MinWidth = 440, MinHeight = 320,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Background = ThemeCatalog.BrushFor("Background"),
@@ -119,7 +125,7 @@ public sealed partial class MainWindow : Window
         var close = new Button { Content = "Close", HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => dialog.Close();
         var layout = new Grid { RowDefinitions = new RowDefinitions("*,Auto"), Margin = new Thickness(24) };
-        layout.Children.Add(new ScrollViewer { Content = new SelectableTextBlock { Text = AppRelease.Notes, TextWrapping = TextWrapping.Wrap } });
+        layout.Children.Add(new ScrollViewer { Content = new SelectableTextBlock { Text = document, TextWrapping = TextWrapping.Wrap } });
         Grid.SetRow(close, 1);
         layout.Children.Add(close);
         dialog.Content = layout;
