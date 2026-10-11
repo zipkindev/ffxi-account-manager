@@ -1,0 +1,1 @@
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType></PropertyGroup><ItemGroup><ProjectReference Include="../../src/FFXILauncher.Desktop/FFXILauncher.Desktop.csproj" /><PackageReference Include="Avalonia.Headless" Version="12.1.2" /></ItemGroup></Project>

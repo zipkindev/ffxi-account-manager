@@ -1,0 +1,628 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless;
+using Avalonia.Interactivity;
+using Avalonia.Input;
+using Avalonia.Input.Platform;
+using Avalonia.Media.Imaging;
+using Avalonia.Media;
+using Avalonia.LogicalTree;
+using FFXILauncher.Desktop.Platform;
+using Avalonia.Threading;
+using FFXILauncher.Core;
+using FFXILauncher.Desktop;
+
+if (args is ["--game-window-ready", var processId, var startedTicks, var executable])
+{
+    var target = new WindowsLoginWindow(new ManagedProcess(int.Parse(processId), new DateTime(long.Parse(startedTicks), DateTimeKind.Utc)), executable);
+    target.WaitForGameWindowAsync(CancellationToken.None).GetAwaiter().GetResult();
+    Console.WriteLine("PASS: exact existing FFXI process has a stable game window; no input sent.");
+    return;
+}
+
+{
+    var profilesRoot = Path.Combine(Path.GetTempPath(), "ffxi-profiles-" + Guid.NewGuid());
+    Directory.CreateDirectory(profilesRoot);
+    try
+    {
+        var launcher = Path.Combine(profilesRoot, "Windower.exe");
+        File.WriteAllText(Path.Combine(profilesRoot, "settings.xml"), "<settings><profile name=\"\"/><profile name=\"HiRes\"/><profile name=\"Low Res\"/></settings>");
+        if (WindowsInstallationDiscovery.ResolveProfile(launcher, "") != "" || WindowsInstallationDiscovery.ResolveProfile(launcher, "Default") != "")
+            throw new Exception("Unnamed Windower default profile was not resolved.");
+        if (!WindowsInstallationDiscovery.ReadProfiles(launcher).SequenceEqual(new[] { "Default", "HiRes", "Low Res" })) throw new Exception("Default profile omitted from selection.");
+        if (WindowsInstallationDiscovery.ResolveProfile(launcher, "hires") != "HiRes" || WindowsInstallationDiscovery.ResolveProfile(launcher, "Missing") != null)
+            throw new Exception("Explicit profile resolution did not validate the configured name.");
+        File.WriteAllText(Path.Combine(profilesRoot, "settings.xml"), "<settings><profile name=\"A\"/><profile name=\"B\"/></settings>");
+        if (WindowsInstallationDiscovery.ResolveProfile(launcher, "") != null) throw new Exception("Ambiguous profile silently selected.");
+        Console.WriteLine("PASS: unnamed default profile resolves to Windower's empty argument; named overrides are checked and ambiguous defaults remain blocked.");
+    }
+    finally { Directory.Delete(profilesRoot, true); }
+    var now = DateTimeOffset.UtcNow;
+    var token = new string('a', 64);
+    var request = new CalibrationRequest(token, Guid.NewGuid().ToString("N"), Guid.NewGuid(), new ManagedProcess(1, DateTime.UtcNow), "inspect", now.AddSeconds(30));
+    if (!WindowsCalibrationControl.Accepts(request, token, now)) throw new Exception("Valid bounded inspection request rejected.");
+    if (!WindowsCalibrationControl.Accepts(request with { Operation = "launch", Process = null! }, token, now)) throw new Exception("Bounded configured-account launch rejected.");
+    if (!WindowsCalibrationControl.Accepts(request with { Operation = "train-member", PressMs = 1, PollMs = 1 }, token, now)) throw new Exception("Bounded fast section trial rejected.");
+    if (!WindowsCalibrationControl.Accepts(request with { Operation = "train-character", PressMs = 1, PollMs = 1 }, token, now)) throw new Exception("Bounded character timing trial rejected.");
+    foreach (var gap in new[] { 0, 50, 3000 })
+        if (!WindowsCalibrationControl.Accepts(request with { Operation = "train-character-success", PressMs = 40, PollMs = 10, MenuGapMs = gap }, token, now))
+            throw new Exception("Bounded successful-route trial rejected.");
+    foreach (var gap in new[] { -1, 3001 })
+        if (WindowsCalibrationControl.Accepts(request with { Operation = "train-character-success", MenuGapMs = gap }, token, now))
+            throw new Exception("Unbounded successful-route trial accepted.");
+    if (WindowsCalibrationControl.Accepts(request with { MenuGapMs = 50 }, token, now)) throw new Exception("Menu gap accepted outside success training.");
+    foreach (var operation in new[] { "train-password", "train-play", "train-character", "continue-login", "return-game-menu" })
+    {
+        if (!WindowsCalibrationControl.Accepts(request with { Operation = operation }, token, now)) throw new Exception("Bounded persistent-session section rejected.");
+        if (operation != "train-character" && WindowsCalibrationControl.Accepts(request with { Operation = operation, PressMs = 1 }, token, now)) throw new Exception("Unsupported section timing override accepted.");
+    }
+    foreach (var operation in new[] { "close", "shutdown", "shutdown_all", "train-member" })
+    {
+        if (!WindowsCalibrationControl.Accepts(request with { Operation = operation }, token, now)) throw new Exception("Bounded account operation rejected.");
+        if (WindowsCalibrationControl.Accepts(request with { Operation = operation, Process = null! }, token, now)) throw new Exception("Process-free shutdown or cleanup accepted.");
+    }
+    foreach (var invalid in new[] { request with { Token = new string('b', 64) }, request with { Nonce = "../outside" }, request with { Operation = "shell" },
+        request with { ExpiresUtc = now }, request with { ExpiresUtc = now.AddMinutes(2) }, request with { Account = Guid.Empty }, request with { Process = null! },
+        request with { PressMs = 1 }, request with { Operation = "train-member", PressMs = 0 }, request with { Operation = "train-member", PollMs = 51 } })
+        if (WindowsCalibrationControl.Accepts(invalid, token, now)) throw new Exception("Invalid calibration request accepted.");
+    Console.WriteLine("PASS: calibration rejects foreign capabilities, unsafe operations, invalid identities, and stale/future requests before input.");
+    if (OperatingSystem.IsWindows())
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ffxi-validation-" + Guid.NewGuid());
+        var account = new AccountConfiguration(Guid.NewGuid(), "Synthetic", "Default", "Synthetic", "Asura", "", "SyntheticID");
+        try
+        {
+            if (WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Unvalidated account accepted.");
+            using (var login = new WindowsAutoLogin(root))
+            {
+                if (WindowsUnattendedSetup.IsElevated && login.SetupProblem(account) != null) throw new Exception("Configured manual login must be available before full-flow validation.");
+                if (login.ReadinessProblem(account) == null) throw new Exception("Unattended recovery still requires complete validation.");
+                if (login.SetupProblem(account with { UsesOneTimePassword = true }) == null) throw new Exception("Manual automatic login cannot bypass interactive OTP requirements.");
+            }
+            WindowsLoginValidation.Record(root, account);
+            if (!WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Completed validation did not persist.");
+            foreach (var changed in new[] { account with { SquareEnixId = "OtherID" }, account with { Character = "Other" }, account with { World = "Odin" }, account with { Profile = "Other" }, account with { UsesOneTimePassword = true } })
+                if (WindowsLoginValidation.IsValidated(root, changed)) throw new Exception("Changed account mapping reused login validation.");
+            File.WriteAllText(Path.Combine(root, "login-validation", account.Id.ToString("N") + ".json"), "{}");
+            if (WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Corrupt proof accepted.");
+            Console.WriteLine("PASS: validation persists only for the current automation build and account mapping; changed identities and corrupt proofs stay blocked.");
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+}
+
+if (args.Contains("--login-safety"))
+{
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    var controlRoot = Path.Combine(Path.GetTempPath(), "ffxi-control-test-" + Guid.NewGuid());
+    try
+    {
+        using (var control = new WindowsCalibrationControl(controlRoot, (_, _) => Task.FromResult(new CalibrationOutcome(true, "finished"))))
+        {
+            var controlDirectory = Path.Combine(controlRoot, "login-control");
+            var capability = File.ReadAllText(Path.Combine(controlDirectory, "token"));
+            var nonce = Guid.NewGuid().ToString("N");
+            WindowsAutoLogin.WriteJson(Path.Combine(controlDirectory, "request.json"), new CalibrationRequest(capability, nonce, Guid.NewGuid(), new ManagedProcess(1, DateTime.UtcNow), "inspect", DateTimeOffset.UtcNow.AddSeconds(30)));
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            CalibrationReply? reply;
+            do
+            {
+                reply = WindowsAutoLogin.ReadJson<CalibrationReply>(Path.Combine(controlDirectory, "reply.json"));
+                if (reply?.Nonce == nonce && reply.Finished) break;
+                Thread.Sleep(25);
+            } while (DateTime.UtcNow < deadline);
+            if (reply?.Finished != true || !reply.Success) throw new Exception("Bounded diagnostic completion was not delivered.");
+            control.Report("Late progress must not overwrite completion.");
+            reply = WindowsAutoLogin.ReadJson<CalibrationReply>(Path.Combine(controlDirectory, "reply.json"));
+            if (reply?.Finished != true || reply.Message != "finished") throw new Exception("Late progress overwrote a completed reply.");
+        }
+        Console.WriteLine("PASS: authenticated diagnostic completion remains final after late progress; stub handler sent no input.");
+    }
+    finally { if (Directory.Exists(controlRoot)) Directory.Delete(controlRoot, true); }
+    var replyDirectory = Path.Combine(Path.GetTempPath(), "ffxi-reply-test-" + Guid.NewGuid());
+    Directory.CreateDirectory(replyDirectory);
+    try
+    {
+        var replyPath = Path.Combine(replyDirectory, "reply.json");
+        WindowsAutoLogin.WriteJson(replyPath, new { State = "old" });
+        Task writer;
+        using (var reader = File.Open(replyPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            writer = Task.Run(() => WindowsAutoLogin.WriteJson(replyPath, new { State = "finished" }));
+            Thread.Sleep(100);
+        }
+        writer.GetAwaiter().GetResult();
+        if (!File.ReadAllText(replyPath).Contains("finished", StringComparison.Ordinal) || Directory.GetFiles(replyDirectory, "*.tmp").Length != 0)
+            throw new Exception("Completion reply was dropped or temporary files remained after a transient read lock.");
+        Console.WriteLine("PASS: completion reply survives Windows reader locking and temporary files are cleaned up.");
+    }
+    finally { Directory.Delete(replyDirectory, true); }
+    var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    var start = new System.Diagnostics.ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true };
+    start.ArgumentList.Add("-NoProfile"); start.ArgumentList.Add("-Command"); start.ArgumentList.Add("Start-Sleep -Seconds 60");
+    using var disposable = System.Diagnostics.Process.Start(start)!;
+    try
+    {
+        var correct = new ManagedProcess(disposable.Id, disposable.StartTime.ToUniversalTime());
+        var wrongTime = new WindowsLoginWindow(correct with { StartedUtc = correct.StartedUtc.AddSeconds(1) }, powershell);
+        var wrongImage = new WindowsLoginWindow(correct, Path.Combine(Path.GetTempPath(), "pol.exe"));
+        var hiddenWindow = new WindowsLoginWindow(correct, powershell);
+        var temporary = Path.Combine(Path.GetTempPath(), "ffxi-rejected-" + Guid.NewGuid() + ".bmp");
+        foreach (var target in new[] { wrongTime, wrongImage, hiddenWindow })
+        {
+            try { target.Key(0x0d); throw new Exception("Input accepted for an invalid target."); } catch (InvalidOperationException) { }
+            try { target.Capture(temporary); throw new Exception("Capture accepted for an invalid target."); } catch (InvalidOperationException) { }
+            try { target.ConfirmGameSelection(); throw new Exception("Game confirmation accepted an invalid target."); } catch (InvalidOperationException) { }
+            try { target.ReturnToGameMenu("Minibubble", CancellationToken.None); throw new Exception("Menu return accepted an invalid target."); } catch (InvalidOperationException) { }
+            try { target.ReplayViewportMatches(1280, 800); throw new Exception("Cached replay accepted an invalid target."); } catch (InvalidOperationException) { }
+            try { target.IsCharacterWindow("Synthetic-Test-Only"); throw new Exception("Character-window acknowledgement accepted an invalid target."); } catch (InvalidOperationException) { }
+            if (ReferenceEquals(target, hiddenWindow))
+            {
+                if (target.IsGameWindow) throw new Exception("Missing main window was classified as a ready game window.");
+            }
+            else
+                try { _ = target.IsGameWindow; throw new Exception("Game-window classification accepted a replaced process."); } catch (InvalidOperationException) { }
+            if (File.Exists(temporary)) throw new Exception("Invalid target produced a screenshot.");
+        }
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        try { hiddenWindow.Password("Synthetic-Test-Only", cancelled.Token); throw new Exception("Cancelled password accepted."); } catch (OperationCanceledException) { }
+        try { hiddenWindow.ReturnToGameMenu("Minibubble", cancelled.Token); throw new Exception("Cancelled menu return accepted."); } catch (OperationCanceledException) { }
+        foreach (var duration in new[] { 0, 81 })
+            try { hiddenWindow.ConfirmGameSelection(duration); throw new Exception("Unbounded game key duration accepted."); } catch (InvalidOperationException) { }
+        try { hiddenWindow.WaitForGameWindowAsync(cancelled.Token).GetAwaiter().GetResult(); throw new Exception("Cancelled transition accepted."); } catch (OperationCanceledException) { }
+        try { hiddenWindow.WaitForWindowAsync(cancelled.Token).GetAwaiter().GetResult(); throw new Exception("Cancelled startup wait accepted."); } catch (OperationCanceledException) { }
+        foreach (var target in new[] { wrongTime, wrongImage })
+        {
+            try { target.WaitForGameWindowAsync(CancellationToken.None).GetAwaiter().GetResult(); throw new Exception("Transition accepted a replaced process."); } catch (InvalidOperationException) { }
+            try { target.WaitForWindowAsync(CancellationToken.None).GetAwaiter().GetResult(); throw new Exception("Startup wait accepted a replaced process."); } catch (InvalidOperationException) { }
+        }
+        if (disposable.HasExited) throw new Exception("Input safety checks modified the test process.");
+        Console.WriteLine("PASS: input and capture rejected wrong creation time, wrong executable, unavailable window, and cancellation; no keys or credentials sent.");
+        var delayedStart = new System.Diagnostics.ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var arg in new[] { "-NoProfile", "-STA", "-Command", "Start-Sleep -Seconds 2; Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.Form; $f.Text = 'FFXI isolated startup test'; $f.ClientSize = New-Object System.Drawing.Size(640,480); $f.ShowDialog() | Out-Null" }) delayedStart.ArgumentList.Add(arg);
+        using (var delayed = System.Diagnostics.Process.Start(delayedStart)!)
+        {
+            try
+            {
+                var elapsed = System.Diagnostics.Stopwatch.StartNew();
+                var target = new WindowsLoginWindow(new ManagedProcess(delayed.Id, delayed.StartTime.ToUniversalTime()), powershell);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                target.WaitForWindowAsync(timeout.Token).GetAwaiter().GetResult();
+                if (elapsed.Elapsed < TimeSpan.FromSeconds(2) || delayed.HasExited) throw new Exception("Startup accepted a process before its delayed window opened.");
+                Console.WriteLine("PASS: startup waits for a delayed owned window to become usable without sending input.");
+            }
+            finally { if (!delayed.HasExited) { delayed.Kill(); delayed.WaitForExit(10000); } }
+        }
+        if (WindowsAutoLogin.RunWorker([WindowsAutoLogin.HelperArgument, "../outside", "0", "0", "invalid"]) == 0) throw new Exception("Invalid helper capability accepted.");
+        Console.WriteLine("PASS: invalid worker session rejected before configuration or credentials are read.");
+        using var identity = System.Security.Principal.WindowsIdentity.GetCurrent();
+        using var current = System.Diagnostics.Process.GetCurrentProcess();
+        foreach (var expired in new[] { false, true })
+        {
+            var session = Guid.NewGuid().ToString("N");
+            var sessionDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher", "automation", session);
+            WindowsPrivateDirectory.Create(sessionDirectory);
+            var token = Convert.ToHexStringLower(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+            File.WriteAllText(Path.Combine(sessionDirectory, "token"), token);
+            WindowsAutoLogin.WriteJson(Path.Combine(sessionDirectory, "request.json"), new LoginRequest(expired ? token : new string('0', 64), Guid.NewGuid().ToString("N"), Guid.NewGuid(), correct, expired ? DateTimeOffset.UtcNow.AddSeconds(-1) : DateTimeOffset.UtcNow.AddMinutes(1)));
+            var helperArguments = new[] { WindowsAutoLogin.HelperArgument, session, current.Id.ToString(), current.StartTime.ToUniversalTime().Ticks.ToString(), identity.User!.Value };
+            if (WindowsAutoLogin.RunWorker(withLastTicks()) != 4) throw new Exception("Worker accepted a replacement parent process.");
+            string[] withLastTicks() { var bad = (string[])helperArguments.Clone(); bad[3] = (current.StartTime.ToUniversalTime().Ticks + 1).ToString(); return bad; }
+            using var revoke = new System.Threading.Timer(_ => File.Delete(Path.Combine(sessionDirectory, "token")), null, 400, Timeout.Infinite);
+            if (WindowsAutoLogin.RunWorker(helperArguments) != 0 || Directory.Exists(sessionDirectory)) throw new Exception("Worker did not exit and clean up its private session after revocation.");
+        }
+        Console.WriteLine("PASS: changed parent identity, foreign tokens, expired requests, revocation, and private session cleanup; no real account reads or input.");
+    }
+    finally { if (!disposable.HasExited) { disposable.Kill(); disposable.WaitForExit(10000); } }
+    return;
+}
+
+if (args.Contains("--maintenance-live"))
+{
+    var cache = Path.Combine(Path.GetTempPath(), "ffxi-maintenance-" + Guid.NewGuid());
+    try
+    {
+        using var monitor = new MaintenanceMonitor(cache) { Worlds = ["Asura", "Odin"] };
+        monitor.RefreshAsync(true, CancellationToken.None).GetAwaiter().GetResult();
+        if (monitor.Snapshot.CheckedUtc == null) throw new Exception(monitor.Status);
+        using var http = new HttpClient();
+        var example = http.GetStringAsync("https://www.playonline.com/ff11us/polnews/news27775.shtml").GetAwaiter().GetResult();
+        var parsed = MaintenanceNoticeParser.Parse("https://www.playonline.com/ff11us/polnews/news27775.shtml", "All Worlds Maintenance", example);
+        if (parsed?.StartUtc != new DateTimeOffset(2026, 9, 29, 5, 0, 0, TimeSpan.Zero) || parsed.EndUtc != new DateTimeOffset(2026, 9, 29, 6, 30, 0, TimeSpan.Zero)) throw new Exception("User-provided official example did not parse correctly.");
+        Console.WriteLine("PASS: supplied official notice parsed to its UTC start and end.");
+        Console.WriteLine($"PASS: live official maintenance feed; {monitor.Snapshot.Windows.Count} cached window(s), {monitor.Snapshot.ReviewRequired?.Count ?? 0} requiring review.");
+    }
+    finally { if (Directory.Exists(cache)) Directory.Delete(cache, true); }
+    return;
+}
+
+AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+if (args.Contains("--art-concepts")) { ArtworkConcepts.Render(); return; }
+var directory = Path.Combine(Path.GetTempPath(), "ffxi-ui-" + Guid.NewGuid());
+var window = new MainWindow(directory, false);
+window.Show();
+Dispatcher.UIThread.RunJobs();
+if (window.FindControl<TextBlock>("EmptyState")?.IsVisible != true) throw new Exception("Empty account state did not render.");
+if (!OperatingSystem.IsWindows() && window.FindControl<Button>("LaunchEnabledButton")?.IsEnabled != false) throw new Exception("Unsupported platform launch must be disabled.");
+Directory.CreateDirectory("artifacts");
+using (var frame = window.CaptureRenderedFrame() ?? throw new Exception("No rendered frame")) frame.Save("artifacts/dashboard.png", PngBitmapEncoderOptions.Default);
+Console.WriteLine("PASS: dashboard renders and launch is gated by platform.");
+var editor = new AccountDialog(null, false, false);
+var editorResult = editor.ShowDialog<AccountEdit?>(window);
+Dispatcher.UIThread.RunJobs();
+using (var frame = editor.CaptureRenderedFrame() ?? throw new Exception("No account editor frame")) frame.Save("artifacts/account-editor.png", PngBitmapEncoderOptions.Default);
+Console.WriteLine("PASS: account editor renders.");
+foreach (var expander in editor.GetLogicalDescendants().OfType<Expander>().ToArray()) expander.IsExpanded = true;
+Dispatcher.UIThread.RunJobs();
+var fields = editor.GetLogicalDescendants().OfType<TextBox>().ToArray();
+var passwords = fields.Where(f => f.Name is "PolPasswordField" or "SquareEnixPasswordField" or "MemberPasswordField").ToArray();
+if (passwords.Length != 3 || passwords.Any(f => f.IsEnabled)) throw new Exception("All credential fields must be disabled without a vault.");
+if (editor.GetLogicalDescendants().OfType<ComboBox>().Single(c => c.Name == "WorldField").Items.Count != 16) throw new Exception("World selector must contain the 16 retail worlds without duplicates.");
+fields.Single(f => f.Name == "SquareEnixIdField").Text = "TestSE";
+editor.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "SaveAccountButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var savedDraft = editorResult.GetAwaiter().GetResult() ?? throw new Exception("SE-ID-only draft could not be saved.");
+if (savedDraft.Account.Profile != "" || savedDraft.Account.Character != "" || savedDraft.Account.World != "" || savedDraft.Account.Label != "TestSE") throw new Exception("Tracking fields must not be mandatory for registering an SE account in the manager.");
+var minimal = new AccountDialog(null, true, false);
+var minimalResult = minimal.ShowDialog<AccountEdit?>(window);
+Dispatcher.UIThread.RunJobs();
+minimal.GetLogicalDescendants().OfType<TextBox>().Single(f => f.Name == "SquareEnixIdField").Text = "TestSE";
+minimal.GetLogicalDescendants().OfType<TextBox>().Single(f => f.Name == "SquareEnixPasswordField").Text = "synthetic-SE-password";
+minimal.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "SaveAccountButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var savedMinimal = minimalResult.GetAwaiter().GetResult() ?? throw new Exception("Minimum login configuration was rejected.");
+if (savedMinimal.Credentials?.SquareEnixPassword != "synthetic-SE-password" || !savedMinimal.Account.PolPasswordStoredInPol || savedMinimal.Account.PolMember != "") throw new Exception("SE ID and SE password must be sufficient to save login configuration with POL's password already saved.");
+Console.WriteLine("PASS: SE ID/password minimum setup and optional tracking/mapping fields.");
+var profileAccount = new AccountConfiguration(Guid.NewGuid(), "Profile test", "HiRes", "Synthetic", "Asura", "", "SyntheticSE");
+var profileEditor = new AccountDialog(profileAccount, false, false, ["Default", "HiRes", "Low Res", "UltraHigh"]);
+var profileResult = profileEditor.ShowDialog<AccountEdit?>(window);
+Dispatcher.UIThread.RunJobs();
+var profilePicker = profileEditor.GetLogicalDescendants().OfType<ComboBox>().Single(c => c.Name == "ProfileField");
+if ((profilePicker.SelectedItem as WindowerProfileChoice)?.Value != "HiRes") throw new Exception("Existing profile selection was not retained.");
+profilePicker.SelectedItem = profilePicker.Items.OfType<WindowerProfileChoice>().Single(p => p.Value == "Low Res");
+profileEditor.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "SaveAccountButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+if (profileResult.GetAwaiter().GetResult()?.Account.Profile != "Low Res") throw new Exception("Named profile with spaces was not saved exactly.");
+Console.WriteLine("PASS: per-account detected profile picker preserves existing choices and saves Low Res exactly.");
+
+window.Close();
+var mainAccount = new AccountConfiguration(Guid.NewGuid(), "Main account", "Main", "Hauplibond", "Odin", "", "", true);
+var secondAccount = new AccountConfiguration(Guid.NewGuid(), "Second account", "Second", "Otherchar", "Asura", "", "KnownSE", true);
+var playerData = Path.Combine(directory, "addons", "FFXIManager", "data");
+Directory.CreateDirectory(playerData);
+var playerTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+var playerNonce = "1234567890_abcdef0123456789";
+var playerPayload = $"{playerNonce}\nHauplibond\nOdin\n{playerTime - 60}\n{playerTime}\n";
+var playerStatePayload = playerPayload + "0\n1500\n200\n500\n1\n100\nWest Ronfaure\n";
+File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.status"), playerPayload);
+File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.state"), playerStatePayload + "0\n");
+File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.environment"), playerPayload + "100\nRain\n1184\nFiresday\nWaxing Crescent\n25\n");
+new ConfigurationStore(directory).Save(new(Path.Combine(directory, "Windower.exe"), "", [mainAccount, secondAccount]));
+var scheduleTime = DateTimeOffset.UtcNow;
+var scheduleFixtures = new MaintenanceSnapshot([
+    new("https://www.playonline.com/ff11us/polnews/news100.shtml", "Fixture global maintenance", scheduleTime.AddHours(3), scheduleTime.AddHours(4)),
+    new("https://www.playonline.com/ff11us/polnews/news101.shtml", "Fixture Odin maintenance", scheduleTime.AddHours(1), scheduleTime.AddHours(2), "Odin"),
+    new("https://www.playonline.com/ff11us/polnews/news102.shtml", "Fixture Asura maintenance", scheduleTime.AddHours(2), scheduleTime.AddHours(3), "Asura")
+], scheduleTime);
+File.WriteAllText(Path.Combine(directory, "maintenance.json"), System.Text.Json.JsonSerializer.Serialize(scheduleFixtures));
+var configured = new MainWindow(directory, false);
+configured.Show();
+Dispatcher.UIThread.RunJobs();
+if (configured.GetLogicalDescendants().OfType<Button>().Any(b => Equals(b.Content, "Validate login")))
+    throw new Exception("Obsolete Validate login control is still displayed.");
+if (configured.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "Launch_" + mainAccount.Id.ToString("N")).Content?.ToString() != "Launch profile")
+    throw new Exception("Account launch control is missing.");
+string PlayerText() => configured.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "CharacterState_" + mainAccount.Id.ToString("N")).Text!;
+if (!PlayerText().Contains("Current · West Ronfaure · Dead · HP 0/1500 · MP 200/500")) throw new Exception("Current player stats missing from card.");
+var weatherPanel = configured.GetLogicalDescendants().OfType<StackPanel>().Single(p => p.Name == "Weather_" + mainAccount.Id.ToString("N"));
+if (!weatherPanel.Children.OfType<TextBlock>().Any(t => t.Text == "Rain · Water ×1 (single)") || weatherPanel.Children.OfType<Image>().Count() != 1) throw new Exception("Single Rain must show one game weather icon and its element.");
+var versionButton = configured.FindControl<Button>("VersionButton")!;
+if (versionButton.Content?.ToString() != "v" + AppRelease.Version + " · What’s new") throw new Exception("Displayed version does not match the assembly.");
+versionButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var releaseDialog = configured.OwnedWindows.Single(w => w.Title == "FFXI Account Manager · v" + AppRelease.Version);
+if (!releaseDialog.GetLogicalDescendants().OfType<SelectableTextBlock>().Any(t => t.Text!.Contains("## " + AppRelease.Version))) throw new Exception("Version click did not display bundled current release notes.");
+releaseDialog.Close();
+Dispatcher.UIThread.RunJobs();
+if (PlayerText().Contains("Vana’diel:") || configured.FindControl<TextBlock>("VanaClockStatus")!.Text?.Contains("Moon:") != true) throw new Exception("Time and moon must appear once in the shared header.");
+File.Delete(Path.Combine(playerData, "odin_hauplibond.status"));
+File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.state"), playerStatePayload + playerTime + "\n");
+typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
+if (!PlayerText().Contains("Last logout · West Ronfaure · Dead at logout")) throw new Exception("Dead logout state missing from card after heartbeat removal.");
+Console.WriteLine("PASS: cards show current player vitals and preserve dead logout zone/stats after heartbeat removal.");
+var toggles = configured.GetLogicalDescendants().OfType<ToggleSwitch>().ToArray();
+if (toggles.Length != 6) throw new Exception("Auto login and maintenance require separate controls.");
+var autoToggle = toggles.First(t => Equals(t.Content, "Auto login"));
+var toggle = toggles.First(t => Equals(t.Content, "Maintain connection"));
+toggle.IsChecked = false;
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id).MaintainConnection) throw new Exception("Maintenance toggle was not persisted.");
+autoToggle.IsChecked = false;
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id).AutoLoginEnabled) throw new Exception("Disabling auto login must disable maintenance.");
+toggle.IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (!new ConfigurationStore(directory).Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id).AutoLoginEnabled) throw new Exception("Maintenance must include auto login.");
+toggles.First(t => Equals(t.Content, "Schedule server maintenance")).IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (!new ConfigurationStore(directory).Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id).ScheduleMaintenance) throw new Exception("Scheduled maintenance must persist.");
+if (configured.FindControl<Button>("StartEnabledButton")!.IsEnabled) throw new Exception("Unimplemented automatic login must be visibly disabled.");
+if (configured.FindControl<Button>("StartEnabledButton")!.Content?.ToString()?.Contains("pending", StringComparison.OrdinalIgnoreCase) == true) throw new Exception("Disabled auto login must explain its cause rather than show generic pending.");
+var identities = configured.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text ?? "").ToArray();
+if (!identities.Any(t => t.Contains("Hauplibond · SE ID needs configuration")) || !identities.Any(t => t.Contains("Otherchar · SE ID: KnownSE"))) throw new Exception("Account identity must display its SE ID or an explicit missing-configuration message.");
+configured.GetLogicalDescendants().OfType<CheckBox>().Single(c => c.Name == "SelectAccount_" + mainAccount.Id.ToString("N")).IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (configured.FindControl<TextBlock>("SelectionSummary")!.Text != "1 selected") throw new Exception("Selection must remain separate from enabled automation policies.");
+configured.FindControl<ComboBox>("BulkPolicy")!.SelectedIndex = 3;
+configured.FindControl<Button>("ApplyBulkPolicyButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var savedBulk = new ConfigurationStore(directory).Load().ConfiguredAccounts;
+if (savedBulk.Single(a => a.Id == mainAccount.Id).MaintainConnection || !savedBulk.Single(a => a.Id == mainAccount.Id).AutoLoginEnabled || !savedBulk.Single(a => a.Id == secondAccount.Id).MaintainConnection) throw new Exception("Bulk policy must affect only selected accounts and preserve auto login when disabling maintaining.");
+if (configured.FindControl<TextBlock>("SelectionSummary")!.Text != "1 selected" || configured.FindControl<CheckBox>("SelectAllAccounts")!.IsChecked != null) throw new Exception("Selection must survive a dashboard redraw.");
+if (OperatingSystem.IsWindows())
+{
+    configured.FindControl<ComboBox>("BulkPolicy")!.SelectedIndex = 2;
+    configured.FindControl<Button>("ApplyBulkPolicyButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    Dispatcher.UIThread.RunJobs();
+    configured.FindControl<Button>("ShutdownSelectedButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    Dispatcher.UIThread.RunJobs();
+    var stopped = new ConfigurationStore(directory).Load().ConfiguredAccounts;
+    if (stopped.Single(a => a.Id == mainAccount.Id).MaintainConnection || !stopped.Single(a => a.Id == secondAccount.Id).MaintainConnection) throw new Exception("Selected graceful shutdown must suppress only selected accounts.");
+}
+configured.FindControl<CheckBox>("SelectAllAccounts")!.IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (configured.FindControl<TextBlock>("SelectionSummary")!.Text != "2 selected") throw new Exception("Select all must include every configured account.");
+configured.FindControl<ComboBox>("BulkPolicy")!.SelectedIndex = 1;
+configured.FindControl<Button>("ApplyBulkPolicyButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().ConfiguredAccounts.Any(a => a.AutoLoginEnabled || a.MaintainConnection)) throw new Exception("Bulk disable must clear auto login and maintain for the entire selection.");
+var scheduleLabels = configured.GetLogicalDescendants().OfType<TextBlock>().Where(t => t.Name?.StartsWith("CharacterMaintenance_", StringComparison.Ordinal) == true).ToArray();
+var mainSchedule = scheduleLabels.Single(t => t.Name == "CharacterMaintenance_" + mainAccount.Id.ToString("N")).Text!;
+var secondSchedule = scheduleLabels.Single(t => t.Name == "CharacterMaintenance_" + secondAccount.Id.ToString("N")).Text!;
+if (!mainSchedule.StartsWith("Next: Odin") || !mainSchedule.Contains("Global: Upcoming") || !mainSchedule.Contains("Odin: Upcoming") || mainSchedule.Contains("Asura: Upcoming")) throw new Exception("Odin card must show global and matching-world maintenance only.");
+if (!secondSchedule.StartsWith("Next: Asura") || !secondSchedule.Contains("Asura: Upcoming") || secondSchedule.Contains("Odin: Upcoming")) throw new Exception("Asura card must show matching-world maintenance only.");
+if (mainSchedule.Contains("Pacific time:") || mainSchedule.Contains("Notice title:") || mainSchedule.Split('\n').Length != 3) throw new Exception("Maintenance must be compact and use only local times.");
+Console.WriteLine("PASS: per-character next maintenance combines global and matching-world notices.");
+Console.WriteLine("PASS: selected-only bulk policies, selection persistence, select-all, and missing/known SE identities.");
+configured.FindControl<Expander>("LauncherSetup")!.IsExpanded = false;
+Dispatcher.UIThread.RunJobs();
+using (var frame = configured.CaptureRenderedFrame() ?? throw new Exception("No configured frame")) frame.Save("artifacts/dashboard-accounts.png", PngBitmapEncoderOptions.Default);
+Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
+if (ThemeCatalog.All.Count != 20 || ThemeCatalog.All.Count(t => t.Artwork != null) != 15) throw new Exception("Theme picker must contain five UI and fifteen artwork themes.");
+var themePicker = configured.FindControl<ComboBox>("ThemePicker")!;
+foreach (var theme in ThemeCatalog.All)
+{
+    themePicker.SelectedItem = theme;
+    Dispatcher.UIThread.RunJobs();
+    if (new ConfigurationStore(directory).Load().Theme != theme.Id) throw new Exception("Selected theme did not persist.");
+    if ((configured.FindControl<Image>("BackgroundArtwork")!.Source != null) != (theme.Artwork != null)) throw new Exception("Artwork theme did not load: " + theme.Id + " · " + configured.FindControl<TextBlock>("Activity")!.Text);
+}
+themePicker.SelectedItem = ThemeCatalog.Resolve("abyssea");
+Dispatcher.UIThread.RunJobs();
+var savedArtwork = new ConfigurationStore(directory).Load().CharacterArtwork!;
+if (savedArtwork.Count != 2 || savedArtwork.Values.Any(file => !ThemeCatalog.Landscapes.Contains(file))) throw new Exception("Every character needs a saved allowed landscape.");
+configured.FindControl<Button>("ShuffleArtworkButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+var shuffledArtwork = new ConfigurationStore(directory).Load().CharacterArtwork!;
+if (savedArtwork.Any(pair => shuffledArtwork[pair.Key] == pair.Value)) throw new Exception("Shuffle must choose a different landscape for every character.");
+configured.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = false;
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().LandscapeCards) throw new Exception("Card artwork preference must persist.");
+configured.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().CharacterArtwork!.Any(pair => shuffledArtwork[pair.Key] != pair.Value)) throw new Exception("Toggling artwork must preserve chosen landscapes.");
+configured.Width = 1300;
+Dispatcher.UIThread.RunJobs();
+if (!configured.FindControl<Border>("PortraitFrame")!.IsVisible) throw new Exception("Wide portrait theme needs a visible artwork strip.");
+configured.Width = 900;
+Dispatcher.UIThread.RunJobs();
+if (configured.FindControl<Border>("PortraitFrame")!.IsVisible) throw new Exception("Narrow windows must preserve room for account controls.");
+configured.Width = 1120;
+Dispatcher.UIThread.RunJobs();
+using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-ffxi-theme.png", PngBitmapEncoderOptions.Default);
+themePicker.SelectedItem = ThemeCatalog.Resolve("paper");
+Dispatcher.UIThread.RunJobs();
+using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-paper-theme.png", PngBitmapEncoderOptions.Default);
+themePicker.SelectedItem = ThemeCatalog.Resolve("midnight");
+Dispatcher.UIThread.RunJobs();
+if (ThemeCatalog.Resolve("unknown").Id != "midnight") throw new Exception("Unknown saved theme must fall back safely.");
+configured.FindControl<Grid>("AddonCommandPanel")!.IsVisible = true;
+configured.FindControl<Button>("CopyAddonCommandButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Dispatcher.UIThread.RunJobs();
+if (configured.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult() != "//lua load FFXIManager" || !configured.FindControl<TextBox>("InitialAddonCommand")!.IsReadOnly) throw new Exception("Copy action must write the displayed command and retain manual text selection.");
+configured.FindControl<Grid>("AddonCommandPanel")!.IsVisible = false;
+Console.WriteLine("PASS: all twenty themes load, theme choice persists, unknown themes fall back, and command icon writes the displayed clipboard text.");
+configured.Height = 2200;
+Dispatcher.UIThread.RunJobs();
+var beforeDrag = new ConfigurationStore(directory).Load().ConfiguredAccounts.ToArray();
+Point HandleCenter(Guid id) => configured.GetLogicalDescendants().OfType<Border>().Single(b => b.Name == "Reorder_" + id.ToString("N")).TranslatePoint(new Point(50, 8), configured)!.Value;
+var from = HandleCenter(mainAccount.Id);
+var targetCard = configured.FindControl<StackPanel>("AccountList")!.Children.OfType<Border>().Single(b => Equals(b.Tag, secondAccount.Id));
+var to = targetCard.TranslatePoint(new Point(50, targetCard.Bounds.Height - 8), configured)!.Value;
+configured.MouseDown(from, MouseButton.Left);
+configured.MouseMove(to, RawInputModifiers.LeftMouseButton);
+if (configured.FindControl<Canvas>("DragLayer")!.Children.Count != 1) throw new Exception("Dragging must show a floating card preview.");
+var ghost = configured.FindControl<Canvas>("DragLayer")!.Children.Single();
+var ghostLeft = Canvas.GetLeft(ghost);
+var ghostTop = Canvas.GetTop(ghost);
+if (Math.Abs(ghost.Bounds.Width - targetCard.Bounds.Width) > 1 && Math.Abs(ghost.Width - targetCard.Bounds.Width) > 1) throw new Exception("Dragged card must keep its original width.");
+configured.MouseMove(to + new Vector(10, -10), RawInputModifiers.LeftMouseButton);
+if (Canvas.GetLeft(ghost) != ghostLeft || Canvas.GetTop(ghost) == ghostTop) throw new Exception("Reordering must slide vertically at the original horizontal position.");
+if (!configured.FindControl<StackPanel>("AccountList")!.Children.OfType<Border>().Any(b => b.RenderTransform is TranslateTransform slide && slide.Y != 0)) throw new Exception("Other cards must preview the changing order.");
+configured.MouseMove(to, RawInputModifiers.LeftMouseButton);
+using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-drag-ghost.png", PngBitmapEncoderOptions.Default);
+configured.MouseUp(to, MouseButton.Left);
+Dispatcher.UIThread.RunJobs();
+if (configured.FindControl<Canvas>("DragLayer")!.Children.Count != 0) throw new Exception("Drop must remove the floating preview.");
+var reordered = new ConfigurationStore(directory).Load().ConfiguredAccounts;
+if (!reordered.Select(a => a.Id).SequenceEqual(new[] { secondAccount.Id, mainAccount.Id }) || reordered.Any(a => a != beforeDrag.Single(b => b.Id == a.Id))) throw new Exception("Dragging must persist order without changing account configuration.");
+if (configured.FindControl<TextBlock>("SelectionSummary")!.Text != "2 selected") throw new Exception("Dragging lost account selection.");
+from = HandleCenter(mainAccount.Id);
+configured.MouseDown(from, MouseButton.Left);
+configured.MouseMove(new Point(-10, from.Y - 20), RawInputModifiers.LeftMouseButton);
+configured.MouseUp(new Point(-10, from.Y - 20), MouseButton.Left);
+Dispatcher.UIThread.RunJobs();
+if (!new ConfigurationStore(directory).Load().ConfiguredAccounts.Select(a => a.Id).SequenceEqual(reordered.Select(a => a.Id))) throw new Exception("Dropping outside the list must not reorder accounts.");
+Console.WriteLine("PASS: pointer drag persists character order, preserves account settings and selection, and rejects drops outside the list.");
+configured.Close();
+File.WriteAllText(Path.Combine(directory, "accounts.json"), "{broken");
+var broken = new MainWindow(directory, false);
+broken.Show();
+Dispatcher.UIThread.RunJobs();
+if (broken.FindControl<Button>("LaunchEnabledButton")!.IsEnabled) throw new Exception("Corrupt configuration must disable launch.");
+broken.FindControl<Button>("LaunchEnabledButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+if (File.ReadAllText(Path.Combine(directory, "accounts.json")) != "{broken") throw new Exception("Corrupt configuration was overwritten.");
+broken.Close();
+Console.WriteLine("PASS: corrupt configuration is preserved.");
+if (OperatingSystem.IsWindows())
+{
+    var vault = new WindowsCredentialVault(Path.Combine(directory, "vault"));
+    var id = Guid.NewGuid();
+    var secret = new AccountCredentials("test-POL-secret", "test-SE-secret", "test-member-secret");
+    vault.Save(id, secret);
+    if (vault.Read(id) != secret) throw new Exception("DPAPI round trip failed.");
+    var file = Directory.GetFiles(Path.Combine(directory, "vault")).Single();
+    if (System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(file)).Contains("test-POL-secret")) throw new Exception("Plaintext credential found.");
+    File.WriteAllBytes(file, [1, 2, 3]);
+    try { vault.Read(id); throw new Exception("Corrupt vault accepted."); }
+    catch (System.Security.Cryptography.CryptographicException) { }
+    vault.Delete(id);
+    if (vault.Contains(id)) throw new Exception("Credential deletion failed.");
+    Console.WriteLine("PASS: Windows DPAPI encryption, corruption rejection, and deletion.");
+}
+else Console.WriteLine("SKIP: DPAPI tests require Windows.");
+if (Directory.Exists(directory)) Directory.Delete(directory, true);
+
+if (OperatingSystem.IsWindows())
+{
+    var discovered = new WindowsSessionPlatform().Discover();
+    Console.WriteLine($"PASS: read-only Windows process discovery found {discovered.Count} POL session(s).");
+    var uniqueGame = discovered.Where(p => p.Character != null).GroupBy(p => p.Character, StringComparer.OrdinalIgnoreCase).FirstOrDefault(g => g.Count() == 1)?.Single();
+    if (uniqueGame != null)
+    {
+        var lateDirectory = Path.Combine(Path.GetTempPath(), "ffxi-late-addon-" + Guid.NewGuid());
+        var fakeRoot = Path.Combine(lateDirectory, "fixture-windower");
+        var fakeData = Path.Combine(fakeRoot, "addons", "FFXIManager", "data");
+        Directory.CreateDirectory(fakeData);
+        var fakeWindower = Path.Combine(fakeRoot, "Windower.exe");
+        File.WriteAllBytes(fakeWindower, []);
+        var lateAccount = new AccountConfiguration(Guid.NewGuid(), "Late fixture", "", uniqueGame.Character!, "Odin", "", "");
+        new ConfigurationStore(lateDirectory).Save(new LauncherConfiguration(WindowerPath: fakeWindower, Accounts: [lateAccount]));
+        var lateWindow = new MainWindow(lateDirectory, false);
+        try
+        {
+            lateWindow.Show();
+            var adopt = typeof(MainWindow).GetMethod("AttachVerifiedSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            var refresh = typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            bool HasPid() => lateWindow.GetLogicalDescendants().OfType<TextBlock>().Any(t => (t.Text ?? "").Contains("PID " + uniqueGame.Process.Pid));
+            adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
+            if (HasPid()) throw new Exception("Missing heartbeat cannot attach known-world process.");
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var wrong = Path.Combine(fakeData, "asura_" + uniqueGame.Character!.ToLowerInvariant() + ".status");
+            File.WriteAllLines(wrong, ["1234567890abcdef_123456", uniqueGame.Character!, "Asura", now.ToString(), now.ToString()]);
+            adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
+            if (HasPid()) throw new Exception("Wrong-world late heartbeat cannot attach process.");
+            File.Delete(wrong);
+            var correct = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".status");
+            File.WriteAllLines(correct, ["1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString()]);
+            adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
+            if (!HasPid()) throw new Exception("Fresh heartbeat appearing after startup must attach existing configured account.");
+            Console.WriteLine("PASS: late addon attachment refreshes known-world accounts; missing/wrong-world heartbeats rejected. Only isolated telemetry and read-only process inspection used.");
+        }
+        finally { lateWindow.Close(); Directory.Delete(lateDirectory, true); }
+    }
+    else Console.WriteLine("SKIP: late-addon native attachment check requires a running character process.");
+    var importedDirectory = Path.Combine(Path.GetTempPath(), "ffxi-import-" + Guid.NewGuid());
+    var importedWindow = new MainWindow(importedDirectory);
+    try
+    {
+        importedWindow.Show();
+        Dispatcher.UIThread.RunJobs();
+        var installation = WindowsInstallationDiscovery.Detect();
+        var detectedConfiguration = new ConfigurationStore(importedDirectory).Load();
+        if (installation.WindowerPath != null && detectedConfiguration.WindowerPath != installation.WindowerPath || installation.PolPath != null && detectedConfiguration.PolPath != installation.PolPath) throw new Exception("Detected Windows paths must be filled and persisted at startup.");
+        Console.WriteLine($"PASS: installation detection; Windower={installation.WindowerPath != null}, POL={installation.PolPath != null}, profiles={installation.Profiles.Count}.");
+        var imported = detectedConfiguration.ConfiguredAccounts;
+        var expected = discovered.Where(p => p.Character != null).GroupBy(p => p.Character, StringComparer.OrdinalIgnoreCase).Count(g => g.Count() == 1);
+        if (imported.Count != expected || imported.Any(a => a.AutoLoginEnabled || a.ScheduleMaintenance)) throw new Exception("Startup import must create disabled drafts for unique character sessions.");
+        Console.WriteLine($"PASS: startup imported {imported.Count} running character(s) into isolated account sections without game input.");
+    }
+    finally { importedWindow.Close(); if (Directory.Exists(importedDirectory)) Directory.Delete(importedDirectory, true); }
+}
+
+if (OperatingSystem.IsWindows())
+{
+    var installRoot = Path.Combine(Path.GetTempPath(), "ffxi-install-" + Guid.NewGuid());
+    try
+    {
+        Directory.CreateDirectory(Path.Combine(installRoot, "scripts"));
+        var fakeExe = Path.Combine(installRoot, "Windower.exe");
+        File.WriteAllBytes(fakeExe, []); // Fixture is never executed.
+        if (WindowsAddonDeployment.RunHelper([WindowsAddonDeployment.HelperArgument, fakeExe, "S-1-5-18"]) != 3 || Directory.Exists(Path.Combine(installRoot, "addons"))) throw new Exception("Helper must reject another user's SID before mutating installation.");
+        if (WindowsAddonDeployment.RunHelper([WindowsAddonDeployment.HelperArgument]) != 2) throw new Exception("Helper must reject malformed invocation.");
+        var init = Path.Combine(installRoot, "scripts", "init.txt");
+        var original = System.Text.Encoding.UTF8.GetBytes("wait 5\r\nlua load OtherAddon\r\n");
+        File.WriteAllBytes(init, original);
+        var payload = Path.Combine(AppContext.BaseDirectory, "windower_addons", "FFXIManager");
+        var permissionRequested = false;
+        var deployed = WindowsAddonDeployment.InstallAsync(fakeExe, () => permissionRequested = true).GetAwaiter().GetResult();
+        if (permissionRequested) throw new Exception("Writable installation must not request elevation.");
+        if (!deployed.StartupAdded || deployed.BackupPath == null || !File.ReadAllBytes(deployed.BackupPath).SequenceEqual(original) || !File.ReadAllBytes(init).AsSpan().EndsWith(original)) throw new Exception("Deployment must preserve and back up existing init bytes.");
+        var tokenPath = Path.Combine(deployed.AddonDirectory, "data", "control.token");
+        var token = File.ReadAllText(tokenPath);
+        var alertPath = Path.Combine(deployed.AddonDirectory, "data", "preserved.alert");
+        File.WriteAllText(alertPath, "fixture telemetry");
+        var secondDeployment = WindowerAddonInstaller.Install(fakeExe, payload);
+        if (secondDeployment.StartupAdded || secondDeployment.BackupPath != null || File.ReadAllText(tokenPath) != token || File.ReadAllText(alertPath) != "fixture telemetry") throw new Exception("Redeploy must preserve startup, token and live telemetry.");
+        var deployedLua = Path.Combine(deployed.AddonDirectory, "FFXIManager.lua");
+        File.Delete(deployedLua);
+        using (var existingManagerMutex = new Mutex(false, "FFXILauncher-" + Environment.UserName))
+        using (var user = System.Security.Principal.WindowsIdentity.GetCurrent())
+        {
+            var helperStart = new System.Diagnostics.ProcessStartInfo(Path.Combine(AppContext.BaseDirectory, "FFXILauncher.Desktop.exe")) { UseShellExecute = false, CreateNoWindow = true };
+            helperStart.ArgumentList.Add(WindowsAddonDeployment.HelperArgument);
+            helperStart.ArgumentList.Add(fakeExe);
+            helperStart.ArgumentList.Add(user.User!.Value);
+            using var helper = System.Diagnostics.Process.Start(helperStart) ?? throw new Exception("Helper did not start.");
+            if (!helper.WaitForExit(15000)) { helper.Kill(); throw new Exception("Helper did not exit; it may have opened the desktop UI."); }
+            if (helper.ExitCode != 0 || !File.Exists(deployedLua) || File.ReadAllText(tokenPath) != token) throw new Exception("Helper entry point must deploy while manager mutex exists, preserve token and return success.");
+        }
+        Console.WriteLine("PASS: helper entry point bypasses manager mutex and deploys without opening another UI.");
+        File.Delete(init);
+        if (!WindowerAddonInstaller.Install(fakeExe, payload).StartupAdded || !File.ReadAllText(init).Contains("lua load FFXIManager")) throw new Exception("New installation must create startup script.");
+        File.WriteAllText(tokenPath, "invalid");
+        try { WindowerAddonInstaller.Install(fakeExe, payload); throw new Exception("Invalid existing token was accepted."); }
+        catch (InvalidDataException) { }
+        if (File.ReadAllText(tokenPath) != "invalid") throw new Exception("Invalid token must not be silently replaced.");
+        Console.WriteLine("PASS: isolated Windows addon deployment, exact init backup, idempotence, token/telemetry preservation, new init and invalid-token rejection.");
+    }
+    finally { if (Directory.Exists(installRoot)) Directory.Delete(installRoot, true); }
+}
+
+if (OperatingSystem.IsWindows())
+{
+    var powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    System.Diagnostics.Process StartFixture()
+    {
+        var start = new System.Diagnostics.ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true };
+        foreach (var value in new[] { "-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60" }) start.ArgumentList.Add(value);
+        return System.Diagnostics.Process.Start(start) ?? throw new Exception("Could not start disposable process fixture.");
+    }
+    using var target = StartFixture();
+    using var other = StartFixture();
+    try
+    {
+        var owned = new ManagedProcess(target.Id, target.StartTime.ToUniversalTime());
+        try { WindowsProcessCleanup.TerminateAsync(owned with { StartedUtc = owned.StartedUtc.AddSeconds(1) }, powershell, CancellationToken.None).GetAwaiter().GetResult(); throw new Exception("Replacement process timestamp accepted."); }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("replacement")) { }
+        if (target.HasExited) throw new Exception("Wrong start time killed process.");
+        try { WindowsProcessCleanup.TerminateAsync(owned, Path.Combine(Path.GetTempPath(), "wrong.exe"), CancellationToken.None).GetAwaiter().GetResult(); throw new Exception("Wrong executable accepted."); }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("executable")) { }
+        if (target.HasExited) throw new Exception("Wrong executable killed process.");
+        WindowsProcessCleanup.TerminateAsync(owned, powershell, CancellationToken.None).GetAwaiter().GetResult();
+        if (!target.HasExited || other.HasExited) throw new Exception("Cleanup must terminate only the exact owned fixture.");
+        WindowsProcessCleanup.TerminateAsync(owned, powershell, CancellationToken.None).GetAwaiter().GetResult();
+        Console.WriteLine("PASS: exact process termination and exit verification; wrong creation time/executable rejected; unrelated disposable process preserved.");
+    }
+    finally { if (!target.HasExited) { target.Kill(); target.WaitForExit(); } if (!other.HasExited) { other.Kill(); other.WaitForExit(); } }
+}

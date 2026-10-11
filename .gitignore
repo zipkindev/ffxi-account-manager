@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+artifacts/
+*.user
+*.env
+*.credentials
+
+# Local agent state and private account data
+.codex/
+.agents/
+.aws/
+accounts.json
+managed-sessions.json
+**/vault/
+windower_addons/FFXIManager/data/

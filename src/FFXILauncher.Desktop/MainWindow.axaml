@@ -1,0 +1,109 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="FFXILauncher.Desktop.MainWindow" Title="FFXI Account Manager" Width="1120" Height="960" MinWidth="820" MinHeight="650" Background="{DynamicResource ThemeBackgroundBrush}" Foreground="{DynamicResource ThemeTextBrush}">
+  <Grid>
+    <Image x:Name="BackgroundArtwork" Stretch="UniformToFill" IsHitTestVisible="False" />
+    <Border x:Name="PortraitFrame" Width="240" HorizontalAlignment="Left" ClipToBounds="True" IsVisible="False" IsHitTestVisible="False">
+      <Image x:Name="PortraitArtwork" Stretch="UniformToFill" />
+    </Border>
+    <Border Background="#80101720" IsVisible="False" x:Name="ArtworkShade" IsHitTestVisible="False" />
+  <Grid x:Name="MainContentGrid" RowDefinitions="Auto,*,Auto" Margin="32">
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,24">
+      <StackPanel Spacing="8">
+        <TextBlock Text="FFXI Account Manager" Foreground="{DynamicResource ThemeAccentBrush}" FontSize="30" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Text="Your characters. One place." FontSize="16" Classes="muted" TextWrapping="Wrap" />
+        <Button x:Name="VersionButton" Click="ShowReleaseNotes" HorizontalAlignment="Left" Padding="0" Background="Transparent" BorderThickness="0" Foreground="{DynamicResource ThemeMutedBrush}" ToolTip.Tip="View version and major updates" />
+        <Grid ColumnDefinitions="Auto,*">
+          <Image x:Name="VanaDayIcon" Width="16" Height="16" Margin="0,0,6,0" VerticalAlignment="Center" Stretch="Uniform" />
+          <TextBlock Grid.Column="1" x:Name="VanaClockStatus" Classes="muted" TextWrapping="Wrap" ToolTip.Tip="Calculated from your UTC system clock; continues while games are closed. The icon represents the day's element. Zone weather is reported separately by each character's addon." />
+        </Grid>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Spacing="8" VerticalAlignment="Center">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+          <ComboBox x:Name="ThemePicker" Width="240" SelectionChanged="ThemeChanged" ToolTip.Tip="Choose a saved UI or FFXI artwork theme" />
+          <Button Content="+ Add account" Click="AddAccount" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+          <CheckBox x:Name="LandscapeCardsToggle" Content="Landscape cards" IsCheckedChanged="LandscapeCardsChanged" />
+          <Button x:Name="ShuffleArtworkButton" Content="Shuffle artwork" Click="ShuffleArtwork" Padding="10,5" ToolTip.Tip="Choose and save new landscapes for character cards" />
+        </StackPanel>
+      </StackPanel>
+    </Grid>
+    <ScrollViewer x:Name="AccountScroll" Grid.Row="1">
+      <StackPanel Spacing="12">
+        <Expander x:Name="LauncherSetup" Header="Launcher paths · automatic detection" IsExpanded="True" HorizontalAlignment="Stretch">
+          <StackPanel Spacing="12" Margin="16">
+            <TextBlock x:Name="InstallationStatus" Text="Checking launcher installation…" Classes="muted" TextWrapping="Wrap" />
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+              <StackPanel Spacing="6"><TextBlock Text="Windower.exe" Classes="muted" /><TextBox x:Name="WindowerPath" PlaceholderText="C:\Windower4\Windower.exe" /></StackPanel>
+              <StackPanel Grid.Column="1" Spacing="6"><TextBlock Text="pol.exe" Classes="muted" /><TextBox x:Name="PolPath" PlaceholderText="Path to your installed PlayOnline Viewer" /></StackPanel>
+            </Grid>
+            <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Full auto login requires Windows calibration. Profile-only launching remains available." Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Content="Detect paths" Click="DetectPaths" /><Button Content="Save override" Click="SavePaths" /></StackPanel></Grid>
+            <Button x:Name="UnattendedSetupButton" Content="Enable unattended access · one-time setup" Click="InstallUnattendedAccess" HorizontalAlignment="Left" />
+            <TextBlock x:Name="UnattendedStatus" Classes="muted" TextWrapping="Wrap" Text="Approve setup once, then use the desktop shortcut to start without repeated UAC prompts. Existing accounts and credentials stay in your Windows user profile." />
+          </StackPanel>
+        </Expander>
+        <StackPanel Spacing="10">
+          <TextBlock x:Name="AccountSummary" Text="Accounts" FontSize="20" FontWeight="SemiBold" />
+          <WrapPanel>
+            <Button x:Name="LaunchEnabledButton" Content="Open enabled profiles · manual login" Classes="primary" Click="LaunchEnabled" Margin="0,0,8,8" />
+            <Button x:Name="StartEnabledButton" Content="Auto login enabled accounts · pending" Click="StartEnabled" IsEnabled="False" Margin="0,0,8,8" ToolTip.Tip="Full automatic login is not available in this preview." />
+          </WrapPanel>
+          <TextBlock Text="Launch profile follows Auto login: On logs in; Off opens POL. Bulk Open profiles uses manual login." Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="During auto login, leave the keyboard and mouse idle until it finishes." Foreground="{DynamicResource ThemeWarningBrush}" TextWrapping="Wrap" />
+        </StackPanel>
+        <Expander x:Name="BulkActions" Header="Bulk actions" IsExpanded="False" HorizontalAlignment="Stretch">
+        <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="12">
+          <StackPanel Spacing="10">
+            <WrapPanel>
+              <CheckBox x:Name="SelectAllAccounts" Content="Select all accounts" IsThreeState="True" IsCheckedChanged="SelectAllChanged" Margin="0,0,16,8" />
+              <TextBlock x:Name="SelectionSummary" Text="0 selected" VerticalAlignment="Center" Margin="0,0,16,8" />
+              <Button Content="Clear selection" Click="ClearSelection" Margin="0,0,8,8" />
+            </WrapPanel>
+            <WrapPanel>
+              <Button x:Name="LaunchSelectedButton" Content="Open selected profiles" Click="LaunchSelected" IsEnabled="False" Margin="0,0,8,8" ToolTip.Tip="Opens Windower/POL for the selected accounts. Complete login manually." />
+              <Button x:Name="ShutdownSelectedButton" Content="Graceful shutdown selected" Click="ShutdownSelected" IsEnabled="False" Margin="0,0,8,8" />
+              <Button x:Name="ShutdownAllButton" Content="Graceful shutdown all managed" Click="ShutdownAll" Margin="0,0,8,8" />
+              <Button x:Name="CancelShutdownsButton" Content="Cancel pending shutdowns" Click="CancelShutdowns" IsEnabled="False" Margin="0,0,8,8" />
+            </WrapPanel>
+            <WrapPanel>
+              <ComboBox x:Name="BulkPolicy" SelectedIndex="0" MinWidth="245" Margin="0,0,8,8">
+                <ComboBoxItem Content="Enable auto login" /><ComboBoxItem Content="Disable auto login" />
+                <ComboBoxItem Content="Enable maintain connection" /><ComboBoxItem Content="Disable maintain connection" />
+                <ComboBoxItem Content="Enable maintenance scheduling" /><ComboBoxItem Content="Disable maintenance scheduling" />
+              </ComboBox>
+              <Button x:Name="ApplyBulkPolicyButton" Content="Apply to selected" Click="ApplyBulkPolicy" IsEnabled="False" Margin="0,0,8,8" />
+            </WrapPanel>
+            <TextBlock Text="Selection is separate from Auto login. Shutdown stops reconnects for those accounts and requires the control addon in each running game." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+        </Expander>
+        <TextBlock x:Name="EmptyState" Text="Add your first account, choose its Windower profile, and select a character." Classes="muted" TextWrapping="Wrap" Margin="0,16" />
+        <StackPanel x:Name="AccountList" Spacing="12" />
+        <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Server maintenance" FontSize="18" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Refresh notices" Click="RefreshMaintenance" /></Grid>
+          <TextBlock x:Name="MaintenanceStatus" Text="Official maintenance notices have not been checked." Classes="muted" TextWrapping="Wrap" />
+          <TextBlock Text="Upcoming windows pause reconnects. Automatic shutdown and relogin await Windows login validation." Classes="muted" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Deploy addon + enable auto-load" Click="InstallControlAddon" /><Button Content="Clear alerts for selected worlds" Click="ClearSelectedMaintenanceAlerts" ToolTip.Tip="Release unresolved in-game warning holds after reviewing server availability. Official schedules still apply." /></StackPanel>
+          <TextBlock x:Name="AddonDeploymentStatus" Text="Deploy copies FFXIManager to the detected Windower installation and adds its startup entry. Existing init commands are preserved." Classes="muted" TextWrapping="Wrap" />
+          <Grid x:Name="AddonCommandPanel" ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="False">
+            <TextBox x:Name="InitialAddonCommand" Text="//lua load FFXIManager" IsReadOnly="True" ToolTip.Tip="Select and copy this command manually, or click the clipboard button." />
+            <Button x:Name="CopyAddonCommandButton" Grid.Column="1" Click="CopyAddonCommand" ToolTip.Tip="Copy command to clipboard" AutomationProperties.Name="Copy addon command">
+              <Path Width="18" Height="20" Stretch="Uniform" Stroke="{DynamicResource ThemeTextBrush}" StrokeThickness="1.6" Data="M 7,3 L 17,3 L 17,19 L 3,19 L 3,3 L 7,3 M 7,1 L 13,1 L 13,5 L 7,5 Z M 6,9 L 14,9 M 6,13 L 14,13" />
+            </Button>
+          </Grid>
+        </StackPanel></Border>
+        <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
+          <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Running sessions" FontSize="18" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Discover sessions" Click="DiscoverSessions" /></Grid>
+          <TextBlock Text="Attach existing characters without relaunching. Account and world details are confirmed during setup." Classes="muted" TextWrapping="Wrap" />
+          <StackPanel x:Name="DiscoveredSessions" Spacing="8" />
+        </StackPanel></Border>
+        <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10"><TextBlock Text="Activity" FontSize="18" FontWeight="SemiBold" /><TextBlock x:Name="Activity" Classes="muted" TextWrapping="Wrap" Text="Ready. No sessions launched." /></StackPanel></Border>
+      </StackPanel>
+    </ScrollViewer>
+    <StackPanel Grid.Row="2" Spacing="4">
+    <TextBlock x:Name="Footer" Text="Credentials stay encrypted on this Windows user account. Closing the manager leaves games running." Classes="muted" Margin="0,20,0,0" TextWrapping="Wrap" />
+    <TextBlock x:Name="ArtworkCredit" HorizontalAlignment="Right" VerticalAlignment="Bottom" IsVisible="False" FontSize="9" Foreground="{DynamicResource ThemeMutedBrush}" Text="FINAL FANTASY XI © 2002 - 2020 SQUARE ENIX CO., LTD. All Rights Reserved." />
+    </StackPanel>
+  </Grid>
+  <Canvas x:Name="DragLayer" IsHitTestVisible="False" />
+  </Grid>
+</Window>
