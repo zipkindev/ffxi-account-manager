@@ -90,6 +90,8 @@ public sealed partial class MainWindow : Window
         LandscapeCardsToggle.IsChecked = configuration.LandscapeCards;
         ShowCardMaintenanceToggle.IsChecked = configuration.ShowCardMaintenance;
         ShowCardMaintenanceToggle.IsEnabled = configurationReadable;
+        CardMaintenanceHoursInput.Value = Math.Clamp(configuration.CardMaintenanceHours, 0, 168);
+        CardMaintenanceHoursInput.IsEnabled = configurationReadable;
         ApplyTheme(ThemeCatalog.Resolve(configuration.Theme));
         updatingTheme = false;
         WindowerPath.Text = configuration.WindowerPath;
@@ -253,19 +255,22 @@ public sealed partial class MainWindow : Window
             Log("Could not save card appearance: " + ex.Message);
         }
     }
+    private void CardMaintenanceHoursChanged(object? sender, NumericUpDownValueChangedEventArgs args) =>
+        CardMaintenanceChanged(sender, new RoutedEventArgs());
     private void CardMaintenanceChanged(object? sender, RoutedEventArgs args)
     {
         if (updatingTheme || !configurationReadable) return;
         var previous = configuration;
         try
         {
-            var next = configuration with { ShowCardMaintenance = ShowCardMaintenanceToggle.IsChecked == true };
+            var next = configuration with { ShowCardMaintenance = ShowCardMaintenanceToggle.IsChecked == true, CardMaintenanceHours = (int)Math.Clamp(decimal.Round(CardMaintenanceHoursInput.Value ?? 12, 0), 0m, 168m) };
             store.Save(next); configuration = next; RefreshCharacterMaintenance();
         }
         catch (Exception ex)
         {
             updatingTheme = true;
             ShowCardMaintenanceToggle.IsChecked = previous.ShowCardMaintenance;
+            CardMaintenanceHoursInput.Value = Math.Clamp(previous.CardMaintenanceHours, 0, 168);
             updatingTheme = false;
             Log("Could not save maintenance display preference: " + ex.Message);
         }
@@ -1111,7 +1116,7 @@ public sealed partial class MainWindow : Window
         foreach (var account in configuration.ConfiguredAccounts)
         {
             if (!characterMaintenance.TryGetValue(account.Id, out var display)) continue;
-            var alertWindow = MaintenanceSchedule.CardAlert(snapshot.Windows, account.World, now);
+            var alertWindow = MaintenanceSchedule.CardAlert(snapshot.Windows, account.World, now, Math.Clamp(configuration.CardMaintenanceHours, 0, 168));
             var rows = new List<string>();
             if (alertWindow != null)
             {
@@ -1124,8 +1129,11 @@ public sealed partial class MainWindow : Window
             {
                 var hold = InGameMaintenance.Hold([alert], snapshot, now);
                 if (hold == null && AddonDataDirectory is {} resolvedData) InGameMaintenance.Acknowledge(resolvedData, alert);
-                rows.Add($"In-game alert · {alert.Character}/{alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
-                rows.Add(hold == null ? "Posted window finished; reconnect hold released" : hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
+                if (alertWindow != null)
+                {
+                    rows.Add($"In-game alert · {alert.Character}/{alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
+                    rows.Add(hold == null ? "Posted window finished; reconnect hold released" : hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
+                }
             }
             display.Text = string.Join("\n", rows);
             if (display.Parent is Border panel) panel.IsVisible = configuration.ShowCardMaintenance && rows.Count > 0;

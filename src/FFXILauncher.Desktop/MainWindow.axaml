@@ -32,7 +32,6 @@
           <CheckBox x:Name="LandscapeCardsToggle" Content="Landscape cards" IsCheckedChanged="LandscapeCardsChanged" />
           <Button x:Name="ShuffleArtworkButton" Content="Shuffle artwork" Click="ShuffleArtwork" Padding="10,5" ToolTip.Tip="Choose and save new landscapes for character cards" />
         </StackPanel>
-        <CheckBox x:Name="ShowCardMaintenanceToggle" Content="Show maintenance on cards" HorizontalAlignment="Right" IsCheckedChanged="CardMaintenanceChanged" ToolTip.Tip="Show applicable alerts within 12 hours. The main maintenance section remains visible." />
       </StackPanel>
     </Grid>
     <ScrollViewer x:Name="AccountScroll" Grid.Row="1">
@@ -88,6 +87,12 @@
         <StackPanel x:Name="AccountList" Spacing="12" />
         <Border x:Name="MainMaintenancePanel" Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Server maintenance" FontSize="18" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Refresh notices" Click="RefreshMaintenance" /></Grid>
+          <CheckBox x:Name="ShowCardMaintenanceToggle" Content="Show maintenance alerts on character cards" IsCheckedChanged="CardMaintenanceChanged" ToolTip.Tip="Only changes card visibility; this section and maintenance scheduling remain active." />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBlock Text="Show card alerts" VerticalAlignment="Center" Classes="muted" />
+            <NumericUpDown x:Name="CardMaintenanceHoursInput" Minimum="0" Maximum="168" Increment="1" FormatString="0" Width="90" ValueChanged="CardMaintenanceHoursChanged" />
+            <TextBlock Text="hours before start · 0 = active only" VerticalAlignment="Center" Classes="muted" />
+          </StackPanel>
           <TextBlock x:Name="MaintenanceStatus" Text="Official maintenance notices have not been checked." Classes="muted" TextWrapping="Wrap" />
           <TextBlock Text="Upcoming windows pause reconnects. Automatic shutdown and relogin await Windows login validation." Classes="muted" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Deploy addon + enable auto-load" Click="InstallControlAddon" /><Button Content="Clear alerts for selected worlds" Click="ClearSelectedMaintenanceAlerts" ToolTip.Tip="Release unresolved in-game warning holds after reviewing server availability. Official schedules still apply." /></StackPanel>

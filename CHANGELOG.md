@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.7
+
+- Moved card-alert display controls into Server maintenance.
+- Added one global advance-notice setting from 0 to 168 hours, saved automatically and applied to every account’s applicable notices.
+- Zero hours shows active maintenance only. The main schedule and reconnect protections remain independent of card display preferences.
+
+
 ## 1.0.6
 
 - Added a saved Show maintenance on cards option; the main Server maintenance section remains visible.

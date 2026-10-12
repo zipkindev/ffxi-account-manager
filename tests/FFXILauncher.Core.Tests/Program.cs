@@ -622,3 +622,8 @@ Check(MaintenanceSchedule.CardAlert([worldCardNotice with { StartUtc = alertNow.
 Check(MaintenanceSchedule.CardAlert([globalCardNotice with { StartUtc = alertNow.AddHours(-1), EndUtc = alertNow.AddHours(1) }], "Asura", alertNow) != null, "active maintenance remains visible on cards");
 Check(MaintenanceSchedule.CardAlert([globalCardNotice with { StartUtc = alertNow.AddHours(-2), EndUtc = alertNow }], "Asura", alertNow) == null, "finished card alerts disappear");
 Console.WriteLine($"{passed} final checks passed.");
+
+Check(MaintenanceSchedule.CardAlert([globalCardNotice], "Asura", alertNow, 0) == null, "zero-hour global setting hides upcoming maintenance");
+Check(MaintenanceSchedule.CardAlert([worldCardNotice with { StartUtc = alertNow.AddHours(13), EndUtc = alertNow.AddHours(14) }], "Asura", alertNow, 24) != null, "custom 24-hour global setting includes a notice beyond the default horizon");
+Check(MaintenanceSchedule.CardAlert([globalCardNotice], "Asura", alertNow, 1) == globalCardNotice, "custom global threshold includes its exact boundary");
+Console.WriteLine($"{passed} final checks passed.");
