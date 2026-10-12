@@ -88,6 +88,8 @@ public sealed partial class MainWindow : Window
         ThemePicker.ItemsSource = ThemeCatalog.All;
         ThemePicker.SelectedItem = ThemeCatalog.Resolve(configuration.Theme);
         ThemePicker.IsEnabled = configurationReadable;
+        NormalizePolWindowToggle.IsChecked = configuration.NormalizePolWindow;
+        NormalizePolWindowToggle.IsEnabled = configurationReadable;
         LandscapeCardsToggle.IsChecked = configuration.LandscapeCards;
         ShowCardMaintenanceToggle.IsChecked = configuration.ShowCardMaintenance;
         ShowCardMaintenanceToggle.IsEnabled = configurationReadable;
@@ -283,6 +285,18 @@ public sealed partial class MainWindow : Window
             configuration = previous; updatingTheme = true;
             LandscapeCardsToggle.IsChecked = previous.LandscapeCards; updatingTheme = false;
             Log("Could not save card appearance: " + ex.Message);
+        }
+    }
+    private void NormalizePolWindowChanged(object? sender, RoutedEventArgs args)
+    {
+        if (updatingTheme || !configurationReadable) return;
+        var previous = configuration;
+        try { configuration = configuration with { NormalizePolWindow = NormalizePolWindowToggle.IsChecked == true }; Save(); }
+        catch (Exception ex)
+        {
+            configuration = previous; updatingTheme = true;
+            NormalizePolWindowToggle.IsChecked = previous.NormalizePolWindow;
+            updatingTheme = false; Log("Could not save POL window sizing: " + ex.Message);
         }
     }
     private void CardMaintenanceHoursChanged(object? sender, NumericUpDownValueChangedEventArgs args) =>

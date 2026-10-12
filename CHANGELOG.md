@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.0.15
+
+- After exact-ID member selection, auto login follows the known Enter → Enter path without a second account validation or Log In button lookup.
+- Missed pre-password Enter transitions retry within bounds; credential submissions are not retried. Explicit password rejection shows a credential-check warning; OCR misses do not.
+- POL menu controls are matched to the left menu so cropped Login Information headings cannot be mistaken for Log In buttons.
+- Added a saved native POL sizing option (640 × 480), enabled by default for auto login without changing FFXI profile resolution.
+- Standardized the OCR worker’s UTF-8 input transport, including first-line BOM handling.
+
 ## 1.0.14
 
 - OCR now selects POL or FFXI regions using the owned window’s context instead of a 1,000-pixel width cutoff.

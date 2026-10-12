@@ -46,7 +46,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
         {
             var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
-                StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
+                StandardInputEncoding = new System.Text.UTF8Encoding(false), StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
             foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", AppPayload.FilePath("tools/windows-ocr.ps1"), "-ImagePath", framePath, "-Server" }) info.ArgumentList.Add(arg);
             ocr = Process.Start(info) ?? throw new LoginSafetyException("Windows OCR could not start.");
             // Drain diagnostics without logging potentially sensitive screen data.
@@ -73,11 +73,23 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
         return frame;
     }
 
+    private void LogPolPathEvent(string action, LoginCheckpoint checkpoint)
+    {
+        try
+        {
+            var path = Path.Combine(directory, "pol-path-events.jsonl");
+            if (!File.Exists(path) || new FileInfo(path).Length < 64000)
+                File.AppendAllText(path, JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow, Action = action, Checkpoint = checkpoint.ToString() }) + "\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
     private void Click(LoginFrame frame, string text, int pressMilliseconds = 80)
     {
         var line = (text is "Yes" or "No" && LoginCheckpoints.Recognize(frame) == LoginCheckpoint.CharacterConfirmation
             ? LoginCheckpoints.ConfirmationButton(frame, text) : text is "Cancel" or "Connect" && LoginCheckpoints.Recognize(frame) == LoginCheckpoint.Connect
-                ? LoginCheckpoints.PolDialogButton(frame, text) : frame.UniqueLine(text))
+                ? LoginCheckpoints.PolDialogButton(frame, text) : text is "Log In" or "Back" && LoginCheckpoints.Recognize(frame) == LoginCheckpoint.MemberInformation
+                    ? LoginCheckpoints.PolMenuButton(frame, text) : frame.UniqueLine(text))
             ?? throw new LoginSafetyException(text is "Connect" or "Cancel" or "Back" or "Log In" or "Yes" or "No"
                 ? $"The {text} button could not be identified uniquely. Input stopped."
                 : "A required login control could not be identified uniquely.");
@@ -204,6 +216,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
         try
         {
             window.Focus();
+            if (!inspectOnly && config.NormalizePolWindow) window.NormalizePolClient();
             if (!inspectOnly && window.IsGameWindow) window.ParkCursor();
         }
         finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
@@ -289,8 +302,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
         var characterPollMs = trainingSection == "character" ? pollMs : confirmations.ReplayPollMs;
         var characterTrialPassed = false;
         var characterOpenedThisTrial = false;
-        var cachedLogInUsed = false;
-        var controlPolls = 0;
+        var polEnterPath = new VerifiedPolEnterPath();
         var confirmationPolls = 0;
         var loadingPollUntil = DateTimeOffset.UtcNow;
         var lastCharacterSelection = DateTimeOffset.MinValue;
@@ -426,30 +438,23 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     if (++confirmationPolls % 12 != 0 && DateTimeOffset.UtcNow - lastCharacterSelection < TimeSpan.FromSeconds(2))
                     { await Task.Delay(characterPollMs, cancellation); continue; }
                 }
-                if (controls.HasReplay && previous == LoginCheckpoint.MemberList && memberSelectedByExactId && !cachedLogInUsed &&
-                    DateTimeOffset.UtcNow - stageSince < TimeSpan.FromSeconds(20))
+                if (previous == LoginCheckpoint.MemberList && memberSelectedByExactId && !polEnterPath.Started && !passwordEntered)
                 {
                     dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
                     try
                     {
                         window.Capture(framePath);
-                        if (controls.MatchLogIn(framePath) is {} control)
-                        {
-                            cancellation.ThrowIfCancellationRequested();
-                            window.Click(control.X + control.W / 2.0, control.Y + control.H / 2.0, control.Width, control.Height, pressMs);
-                            // Identity comes from this run's uniquely matched
-                            // exact-ID card, not the account-independent template.
-                            identityVerified = true;
-                            cachedLogInUsed = true;
-                            cachedLogInAt = DateTimeOffset.UtcNow;
-                            RecordAction(LoginCheckpoint.MemberInformation);
-                            report("Reused this run's exact-ID selection and clicked cached POL Log In without OCR…");
-                        }
+                        if (window.IsGameWindow) throw new LoginSafetyException("The verified POL member path changed windows before input.");
+                        var count = polEnterPath.Begin(memberSelectedByExactId, memberSectionOnly);
+                        for (var i = 0; i < count; i++) { cancellation.ThrowIfCancellationRequested(); window.Key(0x0d); }
+                        identityVerified = true;
+                        editorOpened = !memberSectionOnly;
+                        cachedLogInAt = DateTimeOffset.UtcNow;
+                        RecordAction(LoginCheckpoint.MemberInformation);
+                        LogPolPathEvent("VerifiedEnterPair", LoginCheckpoint.MemberList);
+                        report("Following verified POL member path: Enter for Log In, then Enter for password entry…");
                     }
                     finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
-                    if (cachedLogInUsed) { await Task.Delay(pollMs, cancellation); continue; }
-                    // Fast template polling between normal discovery/retry reads.
-                    if (++controlPolls % Math.Max(4, 200 / pollMs) != 0) { await Task.Delay(pollMs, cancellation); continue; }
                 }
                 if (trainingSection != "continue" && previous == LoginCheckpoint.Title && replayPath != null && characterConfirmAttempts == 0)
                 {
@@ -580,7 +585,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     await ReturnToMemberListAsync(frame, cancellation);
                     controls.CommitSuccessfulRun();
                     controls.RecordSectionTrial(pressMs, pollMs, true);
-                    MemberSectionResult = $"Member section reached Connect in {elapsed} ms; returned to the preceding Member List. No password entered. Press={pressMs}ms Poll={pollMs}ms Cached={cachedLogInUsed}.";
+                    MemberSectionResult = $"Member section reached Connect in {elapsed} ms; returned to the preceding Member List. No password entered. Press={pressMs}ms Poll={pollMs}ms KeyboardPath={polEnterPath.Started}.";
                     return;
                 }
                 if (memberSectionOnly && cachedLogInAt != null && stage == LoginCheckpoint.MemberInformation)
@@ -599,10 +604,17 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 }
                 if (!memberSectionOnly && cachedLogInAt != null && stage == LoginCheckpoint.MemberInformation)
                 {
-                    // A transition frame can retain member-information text
-                    // after Log In was accepted. Never click that stale frame.
-                    if (DateTimeOffset.UtcNow - cachedLogInAt > TimeSpan.FromSeconds(2))
-                        throw new LoginSafetyException("POL Log In did not advance. No credential entry was attempted; session preserved.");
+                    if (DateTimeOffset.UtcNow - cachedLogInAt >= TimeSpan.FromMilliseconds(250))
+                    {
+                        if (!polEnterPath.TryRetry(stage, passwordEntered))
+                            throw new LoginSafetyException("POL Log In did not advance after bounded Enter retries. No credentials submitted.");
+                        dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                        try { window.Key(0x0d); }
+                        finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+                        cachedLogInAt = DateTimeOffset.UtcNow;
+                        LogPolPathEvent("RetryLogInEnter", stage);
+                        report("Retrying Enter on the unchanged verified POL Log In screen…");
+                    }
                     await Task.Delay(pollMs, cancellation);
                     continue;
                 }
@@ -638,7 +650,14 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 unknownSince = DateTimeOffset.UtcNow;
                 if (confirmationRecoveryUsed && !characterConfirmed && stage is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
                     timing.InvalidateReplayPath();
-                if (stage == LoginCheckpoint.Error) throw new LoginSafetyException("POL reported a login error. Automatic retries are paused.");
+                if (stage == LoginCheckpoint.Error)
+                {
+                    var rejected = passwordEntered && LoginCheckpoints.IsCredentialRejection(frame);
+                    LogPolPathEvent(rejected ? "CredentialRejected" : "PolError", stage);
+                    throw new LoginSafetyException(rejected
+                        ? "Could not validate user name or password. Please check. Automatic authentication retries stopped."
+                        : "POL reported a login error. Automatic retries are paused.");
+                }
                 if (characterConfirmAttempts > 0 && stage != LoginCheckpoint.CharacterConfirmation && stage != LoginCheckpoint.Characters)
                 {
                     if (stage != LoginCheckpoint.Title || DateTimeOffset.UtcNow - lastCharacterSelection > TimeSpan.FromSeconds(8))
@@ -679,14 +698,14 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     if (stage == LoginCheckpoint.Connect && identityVerified && editorOpened && !passwordEntered &&
                         DateTimeOffset.UtcNow - stageSince >= TimeSpan.FromMilliseconds(500 * (passwordFieldRetries + 1)) && passwordFieldRetries < 3)
                     {
-                        var field = LoginCheckpoints.PasswordField(frame);
-                        if (field != null)
+                        if (polEnterPath.TryRetry(stage, passwordEntered))
                         {
                             dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                            try { window.Click(field.Value.X, field.Value.Y, frame.Width, frame.Height); }
+                            try { window.Key(0x0d); }
                             finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
                             passwordFieldRetries++;
-                            report("Retrying the unchanged password-field opening…");
+                            LogPolPathEvent("RetryPasswordEditorEnter", stage);
+                            report("Retrying Enter to open the unchanged password editor…");
                             await Task.Delay(50, cancellation); continue;
                         }
                     }
@@ -714,7 +733,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 previous = stage;
                 visits[stage] = visits.GetValueOrDefault(stage) + 1;
                 if (visits[stage] > 2 && stage is not LoginCheckpoint.Characters and not LoginCheckpoint.CharacterConfirmation) throw new LoginSafetyException("A login screen repeated unexpectedly. Automation stopped.");
-                report(stage switch { LoginCheckpoint.MemberList => "Selecting the saved POL member…", LoginCheckpoint.MemberInformation => memberSelectedByExactId ? "Opening the shared POL Log In control…" : "Verifying the Square Enix ID…", LoginCheckpoint.Connect => passwordEntered ? "Connecting to PlayOnline…" : "Opening the Square Enix password field…", LoginCheckpoint.PasswordEditor => "Entering the saved Square Enix password…", LoginCheckpoint.Title => "Selecting the configured character…", _ => "Login checkpoint: " + stage });
+                report(stage switch { LoginCheckpoint.MemberList => "Selecting the saved POL member…", LoginCheckpoint.MemberInformation => memberSelectedByExactId ? "Following the verified POL Enter path…" : "Returning to the member list for exact-ID selection…", LoginCheckpoint.Connect => passwordEntered ? "Connecting to PlayOnline…" : "Opening the Square Enix password field…", LoginCheckpoint.PasswordEditor => "Entering the saved Square Enix password…", LoginCheckpoint.Title => "Selecting the configured character…", _ => "Login checkpoint: " + stage });
                 if (stage == LoginCheckpoint.CharacterConfirmation)
                 {
                     // A clear exact prompt is sufficient to confirm immediately.
@@ -760,34 +779,6 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 }
                 if (stage == LoginCheckpoint.MemberList && LoginCheckpoints.Recognize(frame) != LoginCheckpoint.MemberList)
                     throw new LoginSafetyException("The POL member card remained unreadable before selection. No password was entered.");
-                if (stage == LoginCheckpoint.MemberInformation && !identityVerified && !memberSelectedByExactId &&
-                    (frame.UniqueLine("Log In") == null || (!frame.HasIdentity(account.SquareEnixId) &&
-                    !SelectedMemberMatches(frame))))
-                {
-                    var readableUntil = DateTimeOffset.UtcNow.AddSeconds(5);
-                    var connectOpened = false;
-                    while (DateTimeOffset.UtcNow < readableUntil)
-                    {
-                        if (LoginCheckpoints.Recognize(frame) == LoginCheckpoint.MemberInformation && frame.UniqueLine("Log In") != null &&
-                            (frame.HasIdentity(account.SquareEnixId) || SelectedMemberMatches(frame))) break;
-                        await Task.Delay(200, cancellation);
-                        frame = await ReadFrame(cancellation);
-                        // A cached click can open Connect while this final
-                        // member-information read is in flight. Let the normal
-                        // Connect handler verify or cancel it before credentials.
-                        if (LoginCheckpoints.Recognize(frame) == LoginCheckpoint.Connect)
-                        {
-                            connectOpened = true;
-                            break;
-                        }
-                        if (LoginCheckpoints.Recognize(frame) is not LoginCheckpoint.MemberInformation and not LoginCheckpoint.Unknown)
-                            throw new LoginSafetyException("The POL member information changed before identity verification. No password was entered.");
-                    }
-                    if (connectOpened) continue;
-                }
-                if (stage == LoginCheckpoint.MemberInformation && LoginCheckpoints.Recognize(frame) != LoginCheckpoint.MemberInformation)
-                    throw new LoginSafetyException("The POL member information remained unreadable before identity verification. No password was entered.");
-                dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
                 try
                 {
                     switch (stage)
@@ -807,30 +798,19 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             // An unchanged exact-ID list can retry Enter above.
                             break;
                         case LoginCheckpoint.MemberInformation:
-                            if (!identityVerified && !memberSelectedByExactId && !frame.HasIdentity(account.SquareEnixId) &&
-                                !SelectedMemberMatches(frame))
+                            if (!identityVerified && !memberSelectedByExactId)
                             {
-                                if (!returnedToMemberList && selectedMemberLabel == null)
-                                {
-                                    Click(frame, "Back"); returnedToMemberList = true; visits[stage]--; break;
-                                }
-                                throw new LoginSafetyException("The selected POL member could not be verified against its exact Square Enix ID. No password was entered.");
+                                if (returnedToMemberList) throw new LoginSafetyException("A fresh exact-ID member selection is required before login.");
+                                Click(frame, "Back"); returnedToMemberList = true; visits[stage]--; break;
                             }
                             identityVerified = true;
-                            controls.ObserveLogIn(frame, framePath);
-                            Click(frame, "Log In", pressMs);
+                            window.Key(0x0d);
                             cachedLogInAt = DateTimeOffset.UtcNow;
                             break;
                         case LoginCheckpoint.Connect:
                             if (memberSelectedByExactId) identityVerified = true;
                             if (memberSectionOnly && identityVerified)
                                 throw new LoginSafetyException("Member-section training reached its boundary without a recorded selection; input stopped.");
-                            // Shared control replay does not inherit identity from
-                            // the account that taught it. Verify the current exact
-                            // ID or same-run card caption before any password input.
-                            if (!identityVerified && cachedLogInUsed && (frame.HasIdentity(account.SquareEnixId) ||
-                                selectedMemberLabels.Any(label => LoginCheckpoints.SelectedMemberLabelBehindConnectMatches(frame, label))))
-                                identityVerified = true;
                             if (!identityVerified)
                             {
                                 // A previous stopped attempt may leave this dialog open.
@@ -846,8 +826,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             }
                             else
                             {
-                                var field = LoginCheckpoints.PasswordField(frame) ?? throw new LoginSafetyException("The Square Enix password field could not be located safely.");
-                                window.Click(field.X, field.Y, frame.Width, frame.Height); editorOpened = true;
+                                window.Key(0x0d); editorOpened = true;
                             }
                             break;
                         case LoginCheckpoint.PasswordEditor:

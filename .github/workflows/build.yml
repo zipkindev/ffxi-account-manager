@@ -16,6 +16,8 @@ jobs:
         run: dotnet run --project tests/FFXILauncher.Core.Tests
       - name: Dashboard and Windows credential checks
         run: dotnet run --project tests/FFXILauncher.Desktop.Smoke
+      - name: Native POL client sizing
+        run: dotnet run --project tests/FFXILauncher.Desktop.Smoke -- --pol-sizing-test
       - name: Scaled Windows OCR
         shell: powershell
         run: ./tests/test_windows_ocr.ps1

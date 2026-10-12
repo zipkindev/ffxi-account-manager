@@ -1,5 +1,6 @@
 param([Parameter(Mandatory=$true)][string]$ImagePath, [ValidateRange(1,3)][int]$Scale = 2, [switch]$Server, [ValidateSet("Auto","POL","FFXI")][string]$WindowKind = "Auto")
 $ErrorActionPreference = 'Stop'
+[Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 Add-Type -AssemblyName System.Drawing
@@ -176,6 +177,7 @@ try {
 }
 if ($Server) {
     while ($null -ne ($command = [Console]::ReadLine())) {
+        $command = $command.TrimStart([char]0xFEFF)
         if ($command -ceq 'read-pol') { ReadLoginFrame -ScreenKind POL }
         elseif ($command -ceq 'read-game') { ReadLoginFrame -ScreenKind FFXI }
         elseif ($command -ceq 'read-pol-loading') { ReadLoginFrame -LoadingOnly $true -ScreenKind POL }

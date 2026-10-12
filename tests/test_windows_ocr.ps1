@@ -47,7 +47,7 @@ function Write-Fixture([int]$width, [int]$height, [bool]$game = $false) {
     } finally { $font.Dispose(); $graphics.Dispose(); $bitmap.Dispose() }
 }
 function Read-Fixture([string]$command) {
-    $process.StandardInput.WriteLine($command); $process.StandardInput.Flush()
+    $inputWriter.WriteLine($command); $inputWriter.Flush()
     $read = $process.StandardOutput.ReadLineAsync()
     if (-not $read.Wait(15000)) { throw 'OCR fixture read timed out.' }
     if (-not $read.Result) { throw ('OCR fixture returned no frame: ' + $errors.GetAwaiter().GetResult()) }
@@ -62,11 +62,13 @@ try {
     $info.UseShellExecute = $false; $info.CreateNoWindow = $true
     $info.RedirectStandardInput = $true; $info.RedirectStandardOutput = $true; $info.RedirectStandardError = $true
     $process = [Diagnostics.Process]::Start($info)
+    $inputWriter = [IO.StreamWriter]::new($process.StandardInput.BaseStream, [Text.UTF8Encoding]::new($false))
     $errors = $process.StandardError.ReadToEndAsync()
     foreach ($width in @(640, 1280, 1920, 2560)) {
         $height = [int]($width * .75)
         Write-Fixture $width $height
-        $frame = Read-Fixture 'read-pol'
+        $command = if ($width -eq 640) { ([char]0xFEFF).ToString() + 'read-pol' } else { 'read-pol' }
+        $frame = Read-Fixture $command
         if ($frame.Width -ne $width -or $frame.Height -ne $height) { throw 'OCR changed the client coordinate system.' }
         $text = ($frame.Lines.Text -join ' ') -replace '[^a-zA-Z0-9]', ''
         foreach ($id in @('TestMember123', 'AnotherUser456', 'ExampleAlt789', 'FourthMember321')) {

@@ -47,6 +47,7 @@
               <StackPanel Grid.Column="1" Spacing="6"><TextBlock Text="pol.exe" Classes="muted" /><TextBox x:Name="PolPath" PlaceholderText="Path to your installed PlayOnline Viewer" /></StackPanel>
             </Grid>
             <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Full auto login requires Windows calibration. Profile-only launching remains available." Classes="muted" TextWrapping="Wrap" VerticalAlignment="Center" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button Content="Detect paths" Click="DetectPaths" /><Button Content="Save override" Click="SavePaths" /></StackPanel></Grid>
+            <CheckBox x:Name="NormalizePolWindowToggle" Content="Use native POL window size during auto login (640 × 480)" IsCheckedChanged="NormalizePolWindowChanged" ToolTip.Tip="Only resizes the PlayOnline client. Your selected Windower profile still controls FFXI resolution. Disable to retain a larger POL window." />
             <Button x:Name="UnattendedSetupButton" Content="Enable unattended access · one-time setup" Click="InstallUnattendedAccess" HorizontalAlignment="Left" />
             <TextBlock x:Name="UnattendedStatus" Classes="muted" TextWrapping="Wrap" Text="Approve setup once, then use the desktop shortcut to start without repeated UAC prompts. Existing accounts and credentials stay in your Windows user profile." />
           </StackPanel>

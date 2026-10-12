@@ -10,7 +10,7 @@ public sealed record AccountConfiguration(Guid Id, string Label, string Profile,
 }
 public sealed record LauncherConfiguration(string WindowerPath = "", string PolPath = "",
     List<AccountConfiguration>? Accounts = null, string Theme = "midnight", bool LandscapeCards = true,
-    Dictionary<Guid, string>? CharacterArtwork = null, List<string>? ArtworkRemaining = null, bool ShowCardMaintenance = true, int CardMaintenanceHours = 12)
+    Dictionary<Guid, string>? CharacterArtwork = null, List<string>? ArtworkRemaining = null, bool ShowCardMaintenance = true, int CardMaintenanceHours = 12, bool NormalizePolWindow = true)
 {
     [System.Text.Json.Serialization.JsonIgnore]
     public List<AccountConfiguration> ConfiguredAccounts => Accounts ?? [];

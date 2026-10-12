@@ -6,6 +6,8 @@ Windows-first account management and launch automation for Windower and Final Fa
 
 These screenshots show the actual application UI with example accounts and no saved passwords. Captured in the cross-platform renderer; Windows-only launch controls are disabled in these examples.
 
+POL auto login defaults to a native 640 × 480 client window. Toggle this under Launcher paths to retain another POL size; FFXI still uses the selected Windower profile resolution. After exact member selection, the app follows the known Enter path and only types credentials once the password editor is ready.
+
 ### Account dashboard and themes
 
 ![Account dashboard with an FFXI artwork theme](docs/images/dashboard.png)

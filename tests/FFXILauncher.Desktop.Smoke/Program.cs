@@ -13,6 +13,8 @@ using Avalonia.Threading;
 using FFXILauncher.Core;
 using FFXILauncher.Desktop;
 
+if (args.Contains("--pol-sizing-test")) { NativePolSizing.Run(); return; }
+
 if (args is ["--game-window-ready", var processId, var startedTicks, var executable])
 {
     var target = new WindowsLoginWindow(new ManagedProcess(int.Parse(processId), new DateTime(long.Parse(startedTicks), DateTimeKind.Utc)), executable);
@@ -429,6 +431,14 @@ Console.WriteLine("PASS: selected-only bulk policies, selection persistence, sel
 configured.FindControl<Expander>("LauncherSetup")!.IsExpanded = false;
 Dispatcher.UIThread.RunJobs();
 using (var frame = configured.CaptureRenderedFrame() ?? throw new Exception("No configured frame")) frame.Save("artifacts/dashboard-accounts.png", PngBitmapEncoderOptions.Default);
+var nativePolOption = configured.FindControl<CheckBox>("NormalizePolWindowToggle")!;
+if (nativePolOption.IsChecked != true) throw new Exception("Native POL sizing must be enabled by default.");
+nativePolOption.IsChecked = false;
+Dispatcher.UIThread.RunJobs();
+if (new ConfigurationStore(directory).Load().NormalizePolWindow) throw new Exception("POL sizing opt-out did not persist.");
+nativePolOption.IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+if (!new ConfigurationStore(directory).Load().NormalizePolWindow) throw new Exception("POL sizing opt-in did not persist.");
 Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
 if (ThemeCatalog.All.Count != 16 || ThemeCatalog.All.Count(t => t.Artwork != null) != 12) throw new Exception("Theme picker must contain four dark UI and twelve artwork themes.");
 if (ThemeCatalog.All.Any(t => t.Id == "maw") || ThemeCatalog.Resolve("maw") is not { Id: "abyssea", SideArtwork: "Maw.jpg", Artwork: "Illustration6.jpg" }) throw new Exception("Existing Cavernous Maw selections must resolve to the merged Abyssea theme.");

@@ -17,6 +17,8 @@ internal sealed class WindowsLoginWindow(ManagedProcess target, string executabl
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr h, int command);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out Rect r);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] private static extern bool GetClientRect(IntPtr h, out Rect r);
     [DllImport("user32.dll")] private static extern bool ClientToScreen(IntPtr h, ref Point p);
     [DllImport("user32.dll")] private static extern IntPtr WindowFromPoint(Point p);
@@ -97,6 +99,19 @@ internal sealed class WindowsLoginWindow(ManagedProcess target, string executabl
             using var p = Process.GetProcessById(target.Pid);
             return p.MainWindowTitle.Trim().Equals("Final Fantasy XI", StringComparison.OrdinalIgnoreCase);
         }
+    }
+    public void NormalizePolClient()
+    {
+        var h = Handle();
+        using var owned = Process.GetProcessById(target.Pid);
+        if (!owned.MainWindowTitle.StartsWith("PlayOnline Viewer", StringComparison.OrdinalIgnoreCase)) return;
+        if (!GetClientRect(h, out var client) || !GetWindowRect(h, out var outer)) throw new LoginSafetyException("POL window bounds are unavailable.");
+        if (client.Right - client.Left == 640 && client.Bottom - client.Top == 480) return;
+        var width = 640 + outer.Right - outer.Left - (client.Right - client.Left);
+        var height = 480 + outer.Bottom - outer.Top - (client.Bottom - client.Top);
+        // Retain position, Z order and focus; only this owned POL client changes.
+        if (!SetWindowPos(h, IntPtr.Zero, 0, 0, width, height, 0x0002 | 0x0004 | 0x0010))
+            throw new LoginSafetyException("Windows could not resize POL. Disable native POL sizing to retain the current window.");
     }
     public void Focus()
     {

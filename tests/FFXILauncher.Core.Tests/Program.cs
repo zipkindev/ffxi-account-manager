@@ -406,6 +406,20 @@ Check(!ShutdownCleanupPolicy.ShouldRetry(false, TimeSpan.FromSeconds(45), 0), "d
 Check(!ShutdownCleanupPolicy.ShouldRetry(true, TimeSpan.FromSeconds(45), 2), "repeated shutdown cancellations stop after bounded retries");
 Console.WriteLine($"{passed} final checks passed.");
 LoginFrame LoginScreen(params string[] lines) => new(640, 480, lines.Select(t => new OcrLine(t, t.Split(' ').Select((w, i) => new OcrWord(w, i * 10, 20, 10, 10)).ToArray())).ToArray());
+var verifiedPolPath = new VerifiedPolEnterPath();
+try { verifiedPolPath.Begin(false); throw new Exception("Unverified POL path was allowed."); } catch (InvalidOperationException) { passed++; }
+Check(verifiedPolPath.Begin(true) == 2, "fresh exact-ID selection authorizes the two-Enter path without intermediate OCR");
+Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Unknown, false) && !verifiedPolPath.TryRetry(LoginCheckpoint.Error, false), "unknown and error screens cannot authorize retry input");
+for (var retry = 0; retry < 3; retry++) Check(verifiedPolPath.TryRetry(LoginCheckpoint.MemberInformation, false), "missed pre-password Enter can retry on the same reversible screen");
+Check(!verifiedPolPath.TryRetry(LoginCheckpoint.MemberInformation, false), "pre-password retries stop at their bound");
+Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Connect, true) && !verifiedPolPath.TryRetry(LoginCheckpoint.PasswordEditor, false), "Enter retries cannot resubmit credentials or confirm an empty editor");
+Check(new VerifiedPolEnterPath().Begin(true, true) == 1, "member-section testing stops at Connect without opening the password editor");
+var staticPolMenu = new LoginFrame(640, 480, [new("Login Information", []), new("Member Information", []), new("Log In'", [new("Log", 102, 153.5, 28, 15.5), new("In'", 140, 153.5, 28.5, 13.5)]), new("Login", [new("Login", 326, 150.7, 42, 13.3)])]);
+Check(staticPolMenu.UniqueLine("Log In") == null && LoginCheckpoints.PolMenuButton(staticPolMenu, "Log In")?.Words[0].X == 102, "cropped Login Information heading cannot compete with the real left-menu Log In button");
+Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 154, 68, 15)])] }, "Log In") != null, "overlapping left-menu reads still resolve one physical button");
+Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 220, 68, 15)])] }, "Log In") == null, "two separate menu candidates remain blocked");
+Check(!LoginCheckpoints.IsCredentialRejection(LoginScreen("Member Information", "Square Enix Password")) && !LoginCheckpoints.IsCredentialRejection(LoginScreen("Error code", "Connection failed")), "OCR misses and connection errors do not produce false credential alerts");
+Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("The Square Enix ID or password is incorrect")), "explicit POL password rejection is classified for the requested warning");
 Check(LoginCheckpoints.Recognize(LoginScreen("Member List", "Add Member")) == LoginCheckpoint.MemberList, "POL saved members require both list markers");
 Check(LoginCheckpoints.Recognize(LoginScreen("Member List")) == LoginCheckpoint.Unknown, "one stray label cannot authorize a member click");
 Check(LoginCheckpoints.Recognize(LoginScreen("Member Information", "Login Information", "Log In", "Error code")) == LoginCheckpoint.Error, "POL errors override actionable member screens");

@@ -52,6 +52,19 @@ public sealed record LoginFrame(int Width, int Height, OcrLine[] Lines)
 public enum LoginCheckpoint { Unknown, MemberList, MemberInformation, Connect, PasswordEditor, Home, Play, PlayConfirmation, Agreement, Title, Characters, CharacterConfirmation, Error }
 public static class LoginCheckpoints
 {
+    public static OcrLine? PolMenuButton(LoginFrame frame, string label)
+    {
+        if (Recognize(frame) != LoginCheckpoint.MemberInformation || label is not ("Log In" or "Back")) return null;
+        var candidates = frame.Lines.Where(l => LoginFrame.Normalize(l.Text) == LoginFrame.Normalize(label) && l.Words.Length > 0 &&
+            l.Words.All(w => double.IsFinite(w.X) && double.IsFinite(w.Y) && double.IsFinite(w.Width) && double.IsFinite(w.Height) &&
+                w.Width > 0 && w.Height > 0 && w.X >= 0 && w.X + w.Width <= frame.Width * .3 &&
+                w.Y >= frame.Height * .2 && w.Y + w.Height <= frame.Height * .75)).ToArray();
+        if (candidates.Length == 0) return null;
+        var boxes = candidates.Select(l => (Left: l.Words.Min(w => w.X), Right: l.Words.Max(w => w.X + w.Width),
+            Top: l.Words.Min(w => w.Y), Bottom: l.Words.Max(w => w.Y + w.Height))).ToArray();
+        if (boxes.Max(b => b.Left) >= boxes.Min(b => b.Right) || boxes.Max(b => b.Top) >= boxes.Min(b => b.Bottom)) return null;
+        return candidates.OrderBy(l => l.Words.Max(w => w.X + w.Width) - l.Words.Min(w => w.X)).First();
+    }
     public static OcrLine? PolDialogButton(LoginFrame frame, string label)
     {
         if (Recognize(frame) != LoginCheckpoint.Connect || label is not "Cancel" and not "Connect") return null;
@@ -212,10 +225,13 @@ public static class LoginCheckpoints
             label.Words.Any(w => w.X < frame.Width * 0.1)) return null;
         return (x, y);
     }
+    public static bool IsCredentialRejection(LoginFrame frame) =>
+        frame.Has("Incorrect password") || frame.Has("Invalid password") || frame.Has("Wrong password") ||
+        frame.Has("password is incorrect") || frame.Has("password is invalid") || frame.Has("ID or password are incorrect");
     public static LoginCheckpoint Recognize(LoginFrame frame)
     {
         // Error checks precede actionable screens. Maintenance news on the home page is not an error.
-        if (frame.Has("Error code") || frame.Has("Incorrect password") || frame.Has("Connection failed")) return LoginCheckpoint.Error;
+        if (frame.Has("Error code") || IsCredentialRejection(frame) || frame.Has("Connection failed")) return LoginCheckpoint.Error;
         if (frame.Has("Log in with") && frame.Has("Yes") && frame.Has("No")) return LoginCheckpoint.CharacterConfirmation;
         if (frame.Has("Please enter your password") && frame.Has("software keyboard")) return LoginCheckpoint.PasswordEditor;
         if (frame.Has("Connect to PlayOnline") && frame.Has("Square Enix Password")) return LoginCheckpoint.Connect;
