@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.20
+
+- Restored the trained POL route from v1.0.14: shared cached Log In clicks, control-cache learning, and the original password-field click retries and timings.
+- Removed the experimental Enter-opening route. Password typing and the tuned FFXI menu/character Enter replay remain unchanged from the working baseline.
+- Retained cancellation, client sizing, scalable menu matching, OCR transport corrections, and credential-free action tracing.
+
 ## 1.0.19
 
 - Connect activates its default password field with exactly one Enter. The previous field click selected it without opening the editor.

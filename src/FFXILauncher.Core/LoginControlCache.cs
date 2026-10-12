@@ -96,8 +96,17 @@ public sealed class LoginControlCache(string directory, string binding)
     }
     public void ObserveLogIn(LoginFrame frame, string bitmapPath)
     {
-        if (frame.UniqueLine("Log In") is not { Words.Length: > 0 } line) return;
-        if (line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) || !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0)) return;
+        var line = LoginCheckpoints.PolMenuButton(frame, "Log In") ?? frame.UniqueLine("Log In");
+        if (line == null && LoginCheckpoints.PolLogInPoint(frame) is {} point)
+        {
+            // The highlighted caption may be unreadable. Observe the same bounded
+            // button crop established by the independent menu anchors. Promotion
+            // still requires successful runs; this never teaches a failed route.
+            var scale = frame.Width / 640d;
+            line = new OcrLine("Log In", [new("Log In", point.X - 32 * scale, point.Y - 12 * scale, 64 * scale, 24 * scale)]);
+        }
+        if (line == null || line.Words.Length == 0 || line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) ||
+            !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0)) return;
         ObserveLine(frame, bitmapPath, line);
     }
     public void ObserveCharacterConfirmation(LoginFrame frame, string bitmapPath, string character)

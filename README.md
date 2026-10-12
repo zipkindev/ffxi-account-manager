@@ -6,7 +6,7 @@ Windows-first account management and launch automation for Windower and Final Fa
 
 These screenshots show the actual application UI with example accounts and no saved passwords. Captured in the cross-platform renderer; Windows-only launch controls are disabled in these examples.
 
-POL auto login defaults to a native 640 × 480 client window. Toggle this under Launcher paths to retain another POL size; FFXI still uses the selected Windower profile resolution. After exact member selection, the app follows the known Enter path and only types credentials once the password editor is ready.
+POL auto login defaults to a native 640 × 480 client window. Toggle this under Launcher paths to retain another POL size; FFXI still uses the selected Windower profile resolution. After exact member selection, the app replays the trained POL control path and only types credentials once the password editor is ready.
 
 ### Account dashboard and themes
 
@@ -119,3 +119,7 @@ Dependencies retain their own licenses. [Third-party notices](THIRD-PARTY-NOTICE
 
 FINAL FANTASY XI © 2002 - 2020 SQUARE ENIX CO., LTD. All Rights Reserved.
 FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.
+
+### Login route changes
+
+The trained POL action sequence and timings use v1.0.14 as the working baseline. Shared Log In control replay, password-field clicks with their existing bounded retries, password typing, and the learned FFXI Enter path must be preserved when correcting scaling or OCR. A proposed sequence change requires a focused successful trial before replacing that route, followed by one full login per enabled account without authentication retries. A failed trial stays out of the binary release. The stop control remains available throughout testing.

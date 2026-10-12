@@ -406,24 +406,6 @@ Check(!ShutdownCleanupPolicy.ShouldRetry(false, TimeSpan.FromSeconds(45), 0), "d
 Check(!ShutdownCleanupPolicy.ShouldRetry(true, TimeSpan.FromSeconds(45), 2), "repeated shutdown cancellations stop after bounded retries");
 Console.WriteLine($"{passed} final checks passed.");
 LoginFrame LoginScreen(params string[] lines) => new(640, 480, lines.Select(t => new OcrLine(t, t.Split(' ').Select((w, i) => new OcrWord(w, i * 10, 20, 10, 10)).ToArray())).ToArray());
-var verifiedPolPath = new VerifiedPolEnterPath();
-try { verifiedPolPath.Begin(false); throw new Exception("Unverified POL path was allowed."); } catch (InvalidOperationException) { passed++; }
-Check(verifiedPolPath.Begin(true) == 1, "exact member selection authorizes only one Log In Enter, never an editor-opening burst");
-Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Unknown, false) && !verifiedPolPath.TryRetry(LoginCheckpoint.Error, false), "unknown and error screens cannot authorize retry input");
-for (var retry = 0; retry < 3; retry++) Check(verifiedPolPath.TryRetry(LoginCheckpoint.MemberInformation, false), "missed pre-password Enter can retry on the same reversible screen");
-Check(!verifiedPolPath.TryRetry(LoginCheckpoint.MemberInformation, false), "pre-password retries stop at their bound");
-Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Connect, true) && !verifiedPolPath.TryRetry(LoginCheckpoint.PasswordEditor, false), "Enter retries cannot resubmit credentials or confirm an empty editor");
-Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Connect, false), "Connect captures cannot authorize Enter retries into an editor that may have opened");
-var editorPath = new VerifiedPolEnterPath();
-editorPath.Begin(true);
-try { editorPath.RequestEditor(false); throw new Exception("Unverified editor opening allowed."); } catch (InvalidOperationException) { passed++; }
-Check(editorPath.RequestEditor(true) == 1, "verified Connect sends one editor activation Enter");
-try { editorPath.RequestEditor(true); throw new Exception("Duplicate editor opening allowed."); } catch (InvalidOperationException) { passed++; }
-Check(!editorPath.TryRetry(LoginCheckpoint.MemberInformation, false), "stale parent-screen OCR cannot send retry input after requesting the editor");
-Check(editorPath.WaitingForEditor(LoginCheckpoint.Connect, false) && editorPath.WaitingForEditor(LoginCheckpoint.MemberInformation, false),
-    "Connect and stale Login Information frames authorize readiness reads only after editor activation");
-Check(!editorPath.WaitingForEditor(LoginCheckpoint.PasswordEditor, false) && !editorPath.WaitingForEditor(LoginCheckpoint.Connect, true),
-    "read-only opening gate permits the recognized editor and one later credential submission");
 var staticPolMenu = new LoginFrame(640, 480, [new("Login Information", []), new("Member Information", []), new("Log In'", [new("Log", 102, 153.5, 28, 15.5), new("In'", 140, 153.5, 28.5, 13.5)]), new("Login", [new("Login", 326, 150.7, 42, 13.3)])]);
 Check(staticPolMenu.UniqueLine("Log In") == null && LoginCheckpoints.PolMenuButton(staticPolMenu, "Log In")?.Words[0].X == 102, "cropped Login Information heading cannot compete with the real left-menu Log In button");
 Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 154, 68, 15)])] }, "Log In") != null, "overlapping left-menu reads still resolve one physical button");
@@ -442,6 +424,28 @@ Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = Highligh
     "incomplete menu anchors cannot authorize a fallback click");
 Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = [..HighlightedLogIn(1).Lines, new("Connect to PlayOnline", []), new("Square Enix Password", [])] }) == null,
     "Connect dialog forbids Log In fallback even with menu visible behind it");
+{
+    var anchoredDirectory = Path.Combine(Path.GetTempPath(), "ffxi-anchored-menu-" + Guid.NewGuid());
+    Directory.CreateDirectory(anchoredDirectory);
+    var bitmapPath = Path.Combine(anchoredDirectory, "control.bmp");
+    var bitmap = new byte[54 + 640 * 480 * 4];
+    BitConverter.GetBytes((ushort)0x4d42).CopyTo(bitmap, 0); BitConverter.GetBytes(54).CopyTo(bitmap, 10);
+    BitConverter.GetBytes(40).CopyTo(bitmap, 14); BitConverter.GetBytes(640).CopyTo(bitmap, 18);
+    BitConverter.GetBytes(-480).CopyTo(bitmap, 22); BitConverter.GetBytes((ushort)1).CopyTo(bitmap, 26);
+    BitConverter.GetBytes((ushort)32).CopyTo(bitmap, 28); File.WriteAllBytes(bitmapPath, bitmap);
+    var cache = new LoginControlCache(anchoredDirectory, "highlighted-menu");
+    cache.ObserveLogIn(HighlightedLogIn(1), bitmapPath);
+    Check(!new LoginControlCache(anchoredDirectory, "highlighted-menu").HasReplay, "unverified highlighted control cannot activate trained replay");
+    cache.CommitSuccessfulRun();
+    cache = new LoginControlCache(anchoredDirectory, "highlighted-menu");
+    Check(!cache.HasReplay, "one successful highlighted-button observation keeps the established two-success promotion rule");
+    cache.ObserveLogIn(HighlightedLogIn(1), bitmapPath); cache.CommitSuccessfulRun();
+    cache = new LoginControlCache(anchoredDirectory, "highlighted-menu");
+    Check(cache.MatchLogIn(bitmapPath) != null, "highlighted Log In can join the shared trained cache after two successful routes");
+    bitmap[54 + (160 * 640 + 128) * 4] = 1; File.WriteAllBytes(bitmapPath, bitmap);
+    Check(cache.MatchLogIn(bitmapPath) == null, "changed highlighted-button pixels cannot replay the trained click");
+    Directory.Delete(anchoredDirectory, true);
+}
 Check(!LoginCheckpoints.IsCredentialRejection(LoginScreen("Member Information", "Square Enix Password")) && !LoginCheckpoints.IsCredentialRejection(LoginScreen("Error code", "Connection failed")), "OCR misses and connection errors do not produce false credential alerts");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("The Square Enix ID or password is incorrect")), "explicit POL password rejection is classified for the requested warning");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("Square Enix Account Certification Error", "Error code:POL-5311", "The Square Enix ID, Square Enix password, or", "one-time password entered is incorrect.")), "actual POL-5311 screenshot wording reports credential rejection");
