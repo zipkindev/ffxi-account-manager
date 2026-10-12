@@ -10,7 +10,9 @@ These screenshots show the actual application UI with example accounts and no sa
 
 ![Account dashboard with an FFXI artwork theme](docs/images/dashboard.png)
 
-Use the theme picker for a UI or artwork theme, toggle landscape cards, and drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
+Choose one of four dark UI themes or 12 artwork themes, including Abyssea. Expanded windows show a tall cropped art panel with a matching background behind the accounts. Disable Landscape cards for more translucent account cards; enable it for separate landscape images. Images keep their aspect ratio. Drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
+
+[See every theme at full size](docs/themes/README.md), including the narrow-window Abyssea view.
 
 ### Configure an account
 

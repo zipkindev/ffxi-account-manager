@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.0.3
+
+- Reworked all 12 artwork themes with aspect-preserving crops for a tall left panel and matching right-side background.
+- Made character cards more translucent when Landscape cards is off, keeping controls and maintenance details readable.
+- Removed Paper, Misareaux Coast, Tavnazian Safehold and Lufaise Meadows. Removed selections fall back safely to Midnight.
+- Verified bundled artwork, including Abyssea, and added a full theme-preview renderer.
+
+
 ## 1.0.2
 
 - Added a compressed, self-contained Windows executable with no loose DLL requirement.

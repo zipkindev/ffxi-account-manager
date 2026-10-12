@@ -191,8 +191,8 @@ public sealed partial class MainWindow : Window
         }
         ThemeCatalog.Apply(theme);
         BackgroundArtwork.Source = nextArtwork;
-        PortraitArtwork.Source = theme.Portrait ? nextArtwork : null;
-        BackgroundArtwork.Opacity = theme.Portrait ? .25 : .55;
+        PortraitArtwork.Source = nextArtwork;
+        BackgroundArtwork.Opacity = .85;
         themeArtwork?.Dispose();
         themeArtwork = nextArtwork;
         ArtworkShade.IsVisible = nextArtwork != null;
@@ -202,9 +202,32 @@ public sealed partial class MainWindow : Window
     }
     private void UpdateArtworkLayout()
     {
-        var portrait = ThemeCatalog.Resolve(configuration.Theme).Portrait && Bounds.Width >= 1050;
+        var theme = ThemeCatalog.Resolve(configuration.Theme);
+        var portrait = theme.Artwork != null && Bounds.Width >= 1050;
         PortraitFrame.IsVisible = portrait;
+        ArtworkPanels.ColumnDefinitions[0].Width = new GridLength(portrait ? 240 : 0);
         MainContentGrid.Margin = new Thickness(portrait ? 256 : 32, 32, 32, 32);
+        if (themeArtwork != null && Bounds.Height > 0)
+        {
+            PortraitArtwork.Source = CropArtwork(themeArtwork, 240 / Bounds.Height, theme.SideFocus);
+            BackgroundArtwork.Source = CropArtwork(themeArtwork, Math.Max(1, Bounds.Width - (portrait ? 240 : 0)) / Bounds.Height, theme.BackgroundFocus);
+        }
+    }
+    private static CroppedBitmap CropArtwork(Bitmap source, double ratio, double focus)
+    {
+        var size = source.PixelSize;
+        var width = Math.Min(size.Width, Math.Max(1, (int)Math.Round(size.Height * ratio)));
+        var height = Math.Min(size.Height, Math.Max(1, (int)Math.Round(size.Width / ratio)));
+        var x = (int)Math.Clamp(size.Width * focus - width / 2d, 0, size.Width - width);
+        var y = (size.Height - height) / 2;
+        return new CroppedBitmap { Source = source, SourceRect = new PixelRect(x, y, width, height) };
+    }
+    private IBrush CharacterCardBrush()
+    {
+        var theme = ThemeCatalog.Resolve(configuration.Theme);
+        if (configuration.LandscapeCards || theme.Artwork == null) return ThemeCatalog.BrushFor("Surface");
+        var color = Color.Parse(theme.Surface);
+        return new SolidColorBrush(Color.FromArgb(125, color.R, color.G, color.B));
     }
     private Bitmap LandscapeBitmap(string file)
     {
@@ -452,7 +475,7 @@ public sealed partial class MainWindow : Window
             actions.Children.Add(launch); actions.Children.Add(edit); actions.Children.Add(stop); actions.Children.Add(force); actions.Children.Add(lookup); actions.Children.Add(delete);
             foreach (var button in actions.Children.OfType<Button>()) { button.Padding = new Thickness(10, 6); button.Margin = new Thickness(0, 0, 6, 4); button.FontSize = 12; }
             body.Children.Add(actions);
-            var card = new Border { Tag = account.Id, Background = ThemeCatalog.BrushFor("Surface"), CornerRadius = new CornerRadius(10), Padding = new Thickness(16, 12), Child = body };
+            var card = new Border { Tag = account.Id, Background = CharacterCardBrush(), CornerRadius = new CornerRadius(10), Padding = new Thickness(16, 12), Child = body };
             if (configuration.LandscapeCards && ThemeCatalog.Resolve(configuration.Theme).Artwork != null)
             {
                 var selectedArt = configuration.CharacterArtwork?.GetValueOrDefault(account.Id);

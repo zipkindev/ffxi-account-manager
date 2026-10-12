@@ -1,10 +1,14 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="FFXILauncher.Desktop.MainWindow" Title="FFXI Account Manager" Width="1120" Height="960" MinWidth="820" MinHeight="650" Background="{DynamicResource ThemeBackgroundBrush}" Foreground="{DynamicResource ThemeTextBrush}">
   <Grid>
-    <Image x:Name="BackgroundArtwork" Stretch="UniformToFill" IsHitTestVisible="False" />
-    <Border x:Name="PortraitFrame" Width="240" HorizontalAlignment="Left" ClipToBounds="True" IsVisible="False" IsHitTestVisible="False">
-      <Image x:Name="PortraitArtwork" Stretch="UniformToFill" />
-    </Border>
-    <Border Background="#80101720" IsVisible="False" x:Name="ArtworkShade" IsHitTestVisible="False" />
+    <Grid x:Name="ArtworkPanels" ColumnDefinitions="0,*" IsHitTestVisible="False">
+      <Border x:Name="PortraitFrame" Grid.Column="0" ClipToBounds="True" IsVisible="False">
+        <Image x:Name="PortraitArtwork" Stretch="UniformToFill" />
+      </Border>
+      <Grid Grid.Column="1" ClipToBounds="True">
+        <Image x:Name="BackgroundArtwork" Stretch="UniformToFill" />
+        <Border Background="#8C101720" IsVisible="False" x:Name="ArtworkShade" />
+      </Grid>
+    </Grid>
   <Grid x:Name="MainContentGrid" RowDefinitions="Auto,*,Auto" Margin="32">
     <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,24">
       <StackPanel Spacing="8">

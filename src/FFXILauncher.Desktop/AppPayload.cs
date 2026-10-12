@@ -81,8 +81,16 @@ internal static class AppPayload
         using var iconStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Weather/Water.png"));
         using var icon = new Avalonia.Media.Imaging.Bitmap(iconStream);
         var nativeImageDecoded = icon.PixelSize.Width > 0 && icon.PixelSize.Height > 0;
+        var artworkThemesVerified = 0;
+        foreach (var theme in ThemeCatalog.All.Where(t => t.Artwork != null))
+        {
+            using var artworkStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Themes/" + theme.Artwork));
+            using var artwork = new Avalonia.Media.Imaging.Bitmap(artworkStream);
+            if (artwork.PixelSize.Width <= 0 || artwork.PixelSize.Height <= 0) throw new IOException("Invalid bundled artwork.");
+            artworkThemesVerified++;
+        }
         var installSource = InstallSource();
-        return new { Version = AppRelease.Version, Standalone, SupportFilesVerified = count, NativeImageDecoded = nativeImageDecoded,
+        return new { Version = AppRelease.Version, Standalone, SupportFilesVerified = count, ArtworkThemesVerified = artworkThemesVerified, NativeImageDecoded = nativeImageDecoded,
             InstallerPrepared = System.IO.File.Exists(Path.Combine(installSource, "FFXILauncher.Desktop.exe")),
             LicensesAvailable = AppRelease.Licenses.Contains("MIT License"), BuildIdentity };
     }

@@ -5,7 +5,7 @@ using Avalonia.Styling;
 
 namespace FFXILauncher.Desktop;
 
-public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null)
+public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null, double SideFocus = .5, double BackgroundFocus = .5)
 {
     public override string ToString() => Name;
 }
@@ -18,12 +18,8 @@ public static class ThemeCatalog
         new("nord", "UI · Nord", "#2E3440", "#3B4252", "#303744", "#ECEFF4", "#C0CBDA", "#88C0D0"),
         new("dracula", "UI · Dracula", "#282A36", "#343746", "#222430", "#F8F8F2", "#C4BDDF", "#BD93F9"),
         new("mocha", "UI · Mocha", "#1E1E2E", "#313244", "#181825", "#CDD6F4", "#BAC2DE", "#CBA6F7"),
-        new("paper", "UI · Paper", "#F3F4F6", "#FFFFFF", "#E7EBF0", "#182433", "#4A586C", "#00685A", true),
         new("adoulin", "FFXI · Western Adoulin", "#151B22", "#E51E2933", "#EB141D26", "#F2E9DC", "#CEC7BB", "#E9BB72", Artwork: "Adoulin.jpg"),
-        new("leafallia", "FFXI · Lufaise Meadows", "#14211C", "#E520332B", "#EB15261E", "#F0F5E5", "#C7D8C0", "#B8DA83", Artwork: "Lufaise.jpg"),
         new("rakaznar", "FFXI · Promyvion", "#191626", "#E52C2541", "#EB201B32", "#F2EAFD", "#D1C0E1", "#C0A0F0", Artwork: "Promyvion.jpg"),
-        new("misareaux", "FFXI · Misareaux Coast", "#101E27", "#E51C3443", "#EB122532", "#E5F7FA", "#B5D4E0", "#74D5E0", Artwork: "Misareaux.jpg"),
-        new("sorrows", "FFXI · Tavnazian Safehold", "#221A18", "#E5392D26", "#EB281F1A", "#FFF0DD", "#D6C2AC", "#EBA577", Artwork: "Tavnazian.jpg"),
         new("eastern-adoulin", "FFXI · Eastern Adoulin", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#97C9D6", Artwork: "EasternAdoulin.jpg", Portrait: false),
         new("ulbuka", "FFXI · East Ulbuka", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#98CAB5", Artwork: "Ulbuka.jpg", Portrait: false),
         new("amano-aht", "FFXI · Treasures of Aht Urhgan", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#D5C59D", Artwork: "Amano5.jpg", Portrait: true, Credit: "©2006 YOSHITAKA AMANO · © SQUARE ENIX"),
@@ -36,7 +32,7 @@ public static class ThemeCatalog
         new("abyssea", "FFXI · Abyssea", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#BDA5D9", Artwork: "Illustration6.jpg", Portrait: true)
     };
 
-    public static IReadOnlyList<string> Landscapes { get; } = new[] { "Ulbuka.jpg", "Adoulin.jpg", "EasternAdoulin.jpg", "Lufaise.jpg", "Misareaux.jpg", "Promyvion.jpg", "Tavnazian.jpg" };
+    public static IReadOnlyList<string> Landscapes { get; } = new[] { "Ulbuka.jpg", "Adoulin.jpg", "EasternAdoulin.jpg", "Promyvion.jpg" };
     public static string DefaultLandscape(Guid account) => Landscapes[(int)(BitConverter.ToUInt32(account.ToByteArray(), 0) % (uint)Landscapes.Count)];
     public static AppTheme Resolve(string? id) => All.FirstOrDefault(t => t.Id == id) ?? All[0];
     public static void Apply(AppTheme theme)

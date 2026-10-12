@@ -237,6 +237,7 @@ if (args.Contains("--maintenance-live"))
 }
 
 AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+if (args.Contains("--theme-previews")) { ThemePreviews.Render(); return; }
 if (args.Contains("--readme-images")) { ReadmeImages.Render(); return; }
 if (args.Contains("--art-concepts")) { ArtworkConcepts.Render(); return; }
 var directory = Path.Combine(Path.GetTempPath(), "ffxi-ui-" + Guid.NewGuid());
@@ -397,12 +398,13 @@ configured.FindControl<Expander>("LauncherSetup")!.IsExpanded = false;
 Dispatcher.UIThread.RunJobs();
 using (var frame = configured.CaptureRenderedFrame() ?? throw new Exception("No configured frame")) frame.Save("artifacts/dashboard-accounts.png", PngBitmapEncoderOptions.Default);
 Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
-if (ThemeCatalog.All.Count != 20 || ThemeCatalog.All.Count(t => t.Artwork != null) != 15) throw new Exception("Theme picker must contain five UI and fifteen artwork themes.");
+if (ThemeCatalog.All.Count != 16 || ThemeCatalog.All.Count(t => t.Artwork != null) != 12) throw new Exception("Theme picker must contain four dark UI and twelve artwork themes.");
 var themePicker = configured.FindControl<ComboBox>("ThemePicker")!;
 foreach (var theme in ThemeCatalog.All)
 {
     themePicker.SelectedItem = theme;
     Dispatcher.UIThread.RunJobs();
+    if (theme.Artwork != null && (!configured.FindControl<Border>("PortraitFrame")!.IsVisible || configured.FindControl<Image>("PortraitArtwork")!.Source is not CroppedBitmap || configured.FindControl<Image>("BackgroundArtwork")!.Source is not CroppedBitmap)) throw new Exception("Every artwork theme needs aspect-preserving expanded crops.");
     if (new ConfigurationStore(directory).Load().Theme != theme.Id) throw new Exception("Selected theme did not persist.");
     if ((configured.FindControl<Image>("BackgroundArtwork")!.Source != null) != (theme.Artwork != null)) throw new Exception("Artwork theme did not load: " + theme.Id + " · " + configured.FindControl<TextBlock>("Activity")!.Text);
 }
@@ -417,6 +419,10 @@ if (savedArtwork.Any(pair => shuffledArtwork[pair.Key] == pair.Value)) throw new
 configured.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = false;
 Dispatcher.UIThread.RunJobs();
 if (new ConfigurationStore(directory).Load().LandscapeCards) throw new Exception("Card artwork preference must persist.");
+var translucentCard = configured.FindControl<StackPanel>("AccountList")!.Children.OfType<Border>().First();
+if (translucentCard.Background is not SolidColorBrush cardBrush || cardBrush.Color.A >= 160) throw new Exception("Disabling landscape cards must reveal the theme through translucent surfaces.");
+foreach (var removed in new[] { "paper", "misareaux", "sorrows", "leafallia" })
+    if (ThemeCatalog.Resolve(removed).Id != "midnight") throw new Exception("Removed themes must fall back to Midnight.");
 configured.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = true;
 Dispatcher.UIThread.RunJobs();
 if (new ConfigurationStore(directory).Load().CharacterArtwork!.Any(pair => shuffledArtwork[pair.Key] != pair.Value)) throw new Exception("Toggling artwork must preserve chosen landscapes.");
@@ -429,9 +435,9 @@ if (configured.FindControl<Border>("PortraitFrame")!.IsVisible) throw new Except
 configured.Width = 1120;
 Dispatcher.UIThread.RunJobs();
 using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-ffxi-theme.png", PngBitmapEncoderOptions.Default);
-themePicker.SelectedItem = ThemeCatalog.Resolve("paper");
+themePicker.SelectedItem = ThemeCatalog.Resolve("nord");
 Dispatcher.UIThread.RunJobs();
-using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-paper-theme.png", PngBitmapEncoderOptions.Default);
+using (var frame = configured.CaptureRenderedFrame()!) frame.Save("artifacts/dashboard-nord-theme.png", PngBitmapEncoderOptions.Default);
 themePicker.SelectedItem = ThemeCatalog.Resolve("midnight");
 Dispatcher.UIThread.RunJobs();
 if (ThemeCatalog.Resolve("unknown").Id != "midnight") throw new Exception("Unknown saved theme must fall back safely.");
@@ -440,7 +446,7 @@ configured.FindControl<Button>("CopyAddonCommandButton")!.RaiseEvent(new RoutedE
 Dispatcher.UIThread.RunJobs();
 if (configured.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult() != "//lua load FFXIManager" || !configured.FindControl<TextBox>("InitialAddonCommand")!.IsReadOnly) throw new Exception("Copy action must write the displayed command and retain manual text selection.");
 configured.FindControl<Grid>("AddonCommandPanel")!.IsVisible = false;
-Console.WriteLine("PASS: all twenty themes load, theme choice persists, unknown themes fall back, and command icon writes the displayed clipboard text.");
+Console.WriteLine("PASS: all sixteen themes load, theme choice persists, unknown themes fall back, and command icon writes the displayed clipboard text.");
 configured.Height = 2200;
 Dispatcher.UIThread.RunJobs();
 var beforeDrag = new ConfigurationStore(directory).Load().ConfiguredAccounts.ToArray();

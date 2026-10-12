@@ -9,9 +9,6 @@ URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/seaso
 |---|---|
 | Adoulin.jpg | 11/vol/8/23.jpg |
 | EasternAdoulin.jpg | 11/vol/8/24.jpg |
-| Lufaise.jpg | 11/vol/8/10.jpg |
-| Misareaux.jpg | 11/vol/8/13.jpg |
-| Tavnazian.jpg | 11/vol/8/6.jpg |
 | Promyvion.jpg | 11/vol/8/0.jpg |
 | Ulbuka.jpg | 11/vol/8/22.jpg |
 | Maw.jpg | 11/vol/8/21.jpg |
