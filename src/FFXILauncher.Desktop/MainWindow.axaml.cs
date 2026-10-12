@@ -256,13 +256,9 @@ public sealed partial class MainWindow : Window
         if (!configurationReadable || LoginOperationActive) return;
         try
         {
-            var choices = configuration.ConfiguredAccounts.ToDictionary(a => a.Id, a =>
-            {
-                var previous = configuration.CharacterArtwork?.GetValueOrDefault(a.Id) ?? ThemeCatalog.DefaultLandscape(a.Id);
-                var candidates = ThemeCatalog.Landscapes.Where(file => file != previous).ToArray();
-                return candidates[Random.Shared.Next(candidates.Length)];
-            });
-            var next = configuration with { CharacterArtwork = choices };
+            var rotation = ArtworkRotation.Next(configuration.ConfiguredAccounts.Select(a => a.Id), ThemeCatalog.Landscapes,
+                configuration.CharacterArtwork, configuration.ArtworkRemaining);
+            var next = configuration with { CharacterArtwork = rotation.Choices, ArtworkRemaining = rotation.Remaining };
             store.Save(next); configuration = next; RenderAccounts();
             Log("New character landscapes saved.");
         }
@@ -335,11 +331,24 @@ public sealed partial class MainWindow : Window
         characterStates.Clear();
         characterWeather.Clear();
         var accounts = configuration.ConfiguredAccounts;
-        if (configurationReadable && accounts.Any(a => configuration.CharacterArtwork?.GetValueOrDefault(a.Id) is not {} file || !ThemeCatalog.Landscapes.Contains(file)))
+        if (configurationReadable)
         {
-            var choices = accounts.ToDictionary(a => a.Id, a => configuration.CharacterArtwork?.GetValueOrDefault(a.Id) is {} file && ThemeCatalog.Landscapes.Contains(file) ? file : ThemeCatalog.DefaultLandscape(a.Id));
-            try { var next = configuration with { CharacterArtwork = choices }; store.Save(next); configuration = next; }
-            catch (Exception ex) { Log("Could not save character artwork: " + ex.Message); }
+            var choices = new Dictionary<Guid, string>();
+            var used = new HashSet<string>();
+            foreach (var account in accounts)
+            {
+                if (used.Count == ThemeCatalog.Landscapes.Count) used.Clear();
+                var current = configuration.CharacterArtwork?.GetValueOrDefault(account.Id);
+                var file = current != null && ThemeCatalog.Landscapes.Contains(current) && !used.Contains(current)
+                    ? current : ThemeCatalog.Landscapes.First(candidate => !used.Contains(candidate));
+                choices[account.Id] = file;
+                used.Add(file);
+            }
+            if (choices.Any(pair => configuration.CharacterArtwork?.GetValueOrDefault(pair.Key) != pair.Value))
+            {
+                try { var next = configuration with { CharacterArtwork = choices, ArtworkRemaining = null }; store.Save(next); configuration = next; }
+                catch (Exception ex) { Log("Could not save character artwork: " + ex.Message); }
+            }
         }
         selectedAccounts.IntersectWith(accounts.Select(a => a.Id));
         EmptyState.IsVisible = accounts.Count == 0;
@@ -482,7 +491,8 @@ public sealed partial class MainWindow : Window
                 var file = selectedArt != null && ThemeCatalog.Landscapes.Contains(selectedArt) ? selectedArt : ThemeCatalog.DefaultLandscape(account.Id);
                 var surface = new Grid();
                 surface.Children.Add(new Border { Background = new ImageBrush(LandscapeBitmap(file)) { Stretch = Stretch.UniformToFill }, IsHitTestVisible = false });
-                surface.Children.Add(new Border { Background = new LinearGradientBrush { StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative), GradientStops = new GradientStops { new GradientStop(Color.Parse("#F0101820"), 0), new GradientStop(Color.Parse("#E0101820"), .7), new GradientStop(Color.Parse("#90101820"), 1) } }, IsHitTestVisible = false });
+                surface.Children.Add(new Border { Background = new LinearGradientBrush { StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative), GradientStops = new GradientStops { new GradientStop(Color.Parse("#50101820"), 0), new GradientStop(Color.Parse("#28101820"), .7), new GradientStop(Color.Parse("#10101820"), 1) } }, IsHitTestVisible = false });
+                body.Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 3, Opacity = .95, OffsetX = 0, OffsetY = 1 };
                 body.Margin = new Thickness(16, 12);
                 card.Child = null;
                 surface.Children.Add(body);

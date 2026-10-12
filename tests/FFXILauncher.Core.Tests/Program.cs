@@ -572,3 +572,42 @@ Check(WeatherEffect.FromName("Sand storms") == new WeatherEffect("Earth", 2), "s
 Check(WeatherEffect.FromName("Squalls") == new WeatherEffect("Water", 2), "squalls render two Water icons");
 Check(WeatherEffect.FromName("Sunshine") == new WeatherEffect(null, 0), "clear conditions have no elemental weather icon");
 Console.WriteLine($"{passed} final checks passed.");
+
+var artworkAccounts = Enumerable.Range(0, 3).Select(_ => Guid.NewGuid()).ToArray();
+var artworkPool = new[] { "one", "two", "three", "four" };
+var firstArtwork = ArtworkRotation.Next(artworkAccounts, artworkPool, null, []);
+Check(firstArtwork.Choices.Values.Distinct().Count() == 3, "visible artwork stays unique when the pool is large enough");
+var secondArtwork = ArtworkRotation.Next(artworkAccounts, artworkPool, firstArtwork.Choices, firstArtwork.Remaining);
+Check(firstArtwork.Choices.Values.Concat(secondArtwork.Choices.Values).Take(4).Distinct().Count() == 4, "rotation uses the entire pool before repeating across shuffles");
+Check(secondArtwork.Choices.Values.Distinct().Count() == 3, "cycle boundary does not duplicate visible cards");
+var manyArtwork = ArtworkRotation.Next(Enumerable.Range(0, 7).Select(_ => Guid.NewGuid()), artworkPool, null, []);
+Check(manyArtwork.Choices.Values.Take(4).Distinct().Count() == 4 && manyArtwork.Choices.Count == 7, "extra accounts reuse artwork only after the pool is exhausted");
+Console.WriteLine($"{passed} final checks passed.");
+
+for (var count = 1; count <= 9; count++)
+{
+    var ids = Enumerable.Range(0, count).Select(_ => Guid.NewGuid()).ToArray();
+    Dictionary<Guid, string>? prior = null;
+    List<string> remaining = [];
+    var drawn = new List<string>();
+    for (var round = 0; round < 12; round++)
+    {
+        var rotation = ArtworkRotation.Next(ids, artworkPool, prior, remaining);
+        drawn.AddRange(rotation.Choices.Values);
+        foreach (var batch in rotation.Choices.Values.Chunk(4))
+            if (batch.Distinct().Count() != batch.Length) throw new Exception("Artwork repeats within a visible pool before exhaustion.");
+        prior = rotation.Choices; remaining = rotation.Remaining;
+    }
+    foreach (var cycle in drawn.Chunk(4))
+        if (cycle.Distinct().Count() != cycle.Length) throw new Exception("Artwork repeats before a complete saved cycle.");
+}
+Check(true, "artwork rotation survives repeated cycle boundaries for one through nine accounts");
+var artworkDirectory = Path.Combine(Path.GetTempPath(), "ffxi-artwork-state-" + Guid.NewGuid());
+try
+{
+    var artworkStore = new ConfigurationStore(artworkDirectory);
+    artworkStore.Save(new LauncherConfiguration(CharacterArtwork: firstArtwork.Choices, ArtworkRemaining: firstArtwork.Remaining));
+    Check(artworkStore.Load().ArtworkRemaining!.SequenceEqual(firstArtwork.Remaining), "artwork rotation position survives saved configuration reload");
+}
+finally { if (Directory.Exists(artworkDirectory)) Directory.Delete(artworkDirectory, true); }
+Console.WriteLine($"{passed} final checks passed.");

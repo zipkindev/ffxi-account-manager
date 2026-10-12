@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.4
+
+- Reduced the shading over landscape cards so the image is the primary card background.
+- Added a saved artwork rotation that uses every landscape before repeating.
+- Keeps visible card images distinct until the landscape pool is exhausted, and repairs duplicate saved selections.
+
+
 ## 1.0.3
 
 - Reworked all 12 artwork themes with aspect-preserving crops for a tall left panel and matching right-side background.

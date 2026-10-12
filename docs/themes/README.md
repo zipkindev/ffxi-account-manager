@@ -1,10 +1,12 @@
-# Theme previews — v1.0.3
+# Theme previews — v1.0.4
 
 Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and matching right background.
 
 ## Artwork themes
 
 ![All twelve artwork themes](artwork-sheet.png)
+
+[Landscape cards enabled: prominent artwork and distinct images](abyssea-landscape-cards.png). Shuffle uses the entire landscape pool before repeating.
 
 ## Dark UI themes
 

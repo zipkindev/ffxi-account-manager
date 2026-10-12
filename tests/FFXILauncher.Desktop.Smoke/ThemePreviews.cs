@@ -41,6 +41,10 @@ internal static class ThemePreviews
             Capture(window, output+"/"+theme.Id+".png");
         }
         window.FindControl<ComboBox>("ThemePicker")!.SelectedItem = ThemeCatalog.Resolve("abyssea");
+        window.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Capture(window, output+"/abyssea-landscape-cards.png");
+        window.FindControl<CheckBox>("LandscapeCardsToggle")!.IsChecked = false;
         window.Width = 900;
         Dispatcher.UIThread.RunJobs();
         Capture(window, output+"/abyssea-narrow.png");
