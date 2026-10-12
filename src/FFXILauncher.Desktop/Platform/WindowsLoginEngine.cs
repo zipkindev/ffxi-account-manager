@@ -585,17 +585,20 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 }
                 if (!memberSectionOnly && cachedLogInAt != null && stage == LoginCheckpoint.MemberInformation)
                 {
-                    if (DateTimeOffset.UtcNow - cachedLogInAt >= TimeSpan.FromMilliseconds(250))
+                    var logInPoint = LoginCheckpoints.PolLogInPoint(frame);
+                    if (DateTimeOffset.UtcNow - cachedLogInAt >= TimeSpan.FromMilliseconds(250) && logInPoint != null)
                     {
                         if (!polEnterPath.TryRetry(stage, passwordEntered))
-                            throw new LoginSafetyException("POL Log In did not advance after bounded Enter retries. No credentials submitted.");
+                            throw new LoginSafetyException("POL Log In did not advance after bounded control retries. No credentials submitted.");
                         dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                        try { Click(frame, "Log In"); }
+                        try { window.Click(logInPoint.Value.X, logInPoint.Value.Y, frame.Width, frame.Height); }
                         finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
                         cachedLogInAt = DateTimeOffset.UtcNow;
                         LogPolPathEvent("RetryLogInClick", stage);
                         report("Retrying the unchanged verified POL Log In control…");
                     }
+                    else if (DateTimeOffset.UtcNow - cachedLogInAt >= TimeSpan.FromSeconds(3))
+                        throw new LoginSafetyException("The POL menu remained unreadable after bounded rereads. No credentials submitted.");
                     await Task.Delay(pollMs, cancellation);
                     continue;
                 }

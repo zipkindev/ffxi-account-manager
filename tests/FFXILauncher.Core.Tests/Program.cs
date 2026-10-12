@@ -418,6 +418,20 @@ var staticPolMenu = new LoginFrame(640, 480, [new("Login Information", []), new(
 Check(staticPolMenu.UniqueLine("Log In") == null && LoginCheckpoints.PolMenuButton(staticPolMenu, "Log In")?.Words[0].X == 102, "cropped Login Information heading cannot compete with the real left-menu Log In button");
 Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 154, 68, 15)])] }, "Log In") != null, "overlapping left-menu reads still resolve one physical button");
 Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 220, 68, 15)])] }, "Log In") == null, "two separate menu candidates remain blocked");
+LoginFrame HighlightedLogIn(double scale) => new((int)(640 * scale), (int)(480 * scale), [new("Login Information", []), new("Member Information", []),
+    new("Settings", [new("Settings", 83.5 * scale, 184.5 * scale, 70 * scale, 15.5 * scale)]),
+    new("Delete", [new("Delete", 95.5 * scale, 216.5 * scale, 58 * scale, 13.5 * scale)]),
+    new("Back", [new("Back", 113 * scale, 249 * scale, 41 * scale, 13 * scale)])]);
+foreach (var scale in new[] { 1d, 2d, 3d, 4d })
+{
+    var point = LoginCheckpoints.PolLogInPoint(HighlightedLogIn(scale));
+    Check(point != null && point.Value.X / scale is > 100 and < 154 && point.Value.Y / scale is > 149 and < 170,
+        "highlighted Log In missing from OCR uses the independently anchored scalable menu route");
+}
+Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = HighlightedLogIn(1).Lines.Where(l => l.Text != "Back").ToArray() }) == null,
+    "incomplete menu anchors cannot authorize a fallback click");
+Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = [..HighlightedLogIn(1).Lines, new("Connect to PlayOnline", []), new("Square Enix Password", [])] }) == null,
+    "Connect dialog forbids Log In fallback even with menu visible behind it");
 Check(!LoginCheckpoints.IsCredentialRejection(LoginScreen("Member Information", "Square Enix Password")) && !LoginCheckpoints.IsCredentialRejection(LoginScreen("Error code", "Connection failed")), "OCR misses and connection errors do not produce false credential alerts");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("The Square Enix ID or password is incorrect")), "explicit POL password rejection is classified for the requested warning");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("Square Enix Account Certification Error", "Error code:POL-5311", "The Square Enix ID, Square Enix password, or", "one-time password entered is incorrect.")), "actual POL-5311 screenshot wording reports credential rejection");

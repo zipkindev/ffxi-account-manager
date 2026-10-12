@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.18
+
+- Highlighted Log In buttons can use the scalable Settings/Delete/Back menu layout when OCR misses the caption. Incomplete menu reads retry within bounds rather than failing immediately.
+- This fallback applies only to Login Information; password-editor opening still sends no additional input while waiting for readiness.
+
 ## 1.0.17
 
 - Removed the speculative pre-password Enter burst and restored the previously working password-field click. Login Information uses one Enter after exact member selection, without repeating account validation.

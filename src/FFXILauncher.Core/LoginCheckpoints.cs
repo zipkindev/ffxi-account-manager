@@ -65,6 +65,32 @@ public static class LoginCheckpoints
         if (boxes.Max(b => b.Left) >= boxes.Min(b => b.Right) || boxes.Max(b => b.Top) >= boxes.Min(b => b.Bottom)) return null;
         return candidates.OrderBy(l => l.Words.Max(w => w.X + w.Width) - l.Words.Min(w => w.X)).First();
     }
+    public static (double X, double Y)? PolLogInPoint(LoginFrame frame)
+    {
+        if (Recognize(frame) != LoginCheckpoint.MemberInformation) return null;
+        var caption = PolMenuButton(frame, "Log In");
+        if (caption != null) return ((caption.Words.Min(w => w.X) + caption.Words.Max(w => w.X + w.Width)) / 2,
+            (caption.Words.Min(w => w.Y) + caption.Words.Max(w => w.Y + w.Height)) / 2);
+        // A highlighted caption can disappear from OCR. Three independent menu
+        // anchors establish the same scalable, right-aligned POL button column.
+        (double Right, double Y)? Anchor(string text)
+        {
+            var line = frame.UniqueLine(text);
+            if (line == null || line.Words.Length == 0 || line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) ||
+                !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0 ||
+                w.X < 0 || w.X + w.Width > frame.Width * .3 || w.Y < frame.Height * .25 || w.Y + w.Height > frame.Height * .7)) return null;
+            return (line.Words.Max(w => w.X + w.Width), (line.Words.Min(w => w.Y) + line.Words.Max(w => w.Y + w.Height)) / 2);
+        }
+        var settings = Anchor("Settings"); var delete = Anchor("Delete"); var back = Anchor("Back");
+        if (settings == null || delete == null || back == null) return null;
+        var gap = delete.Value.Y - settings.Value.Y;
+        if (gap < frame.Height * .04 || gap > frame.Height * .1 ||
+            Math.Abs(back.Value.Y - delete.Value.Y - gap) > gap * .15 ||
+            new[] { settings.Value.Right, delete.Value.Right, back.Value.Right }.Max() -
+            new[] { settings.Value.Right, delete.Value.Right, back.Value.Right }.Min() > frame.Width * .02) return null;
+        var point = (X: settings.Value.Right - gap * .8, Y: settings.Value.Y - gap);
+        return point.X > frame.Width * .08 && point.X < frame.Width * .28 && point.Y > frame.Height * .2 && point.Y < frame.Height * .45 ? point : null;
+    }
     public static OcrLine? PolDialogButton(LoginFrame frame, string label)
     {
         if (Recognize(frame) != LoginCheckpoint.Connect || label is not "Cancel" and not "Connect") return null;
