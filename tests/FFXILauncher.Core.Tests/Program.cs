@@ -414,6 +414,16 @@ for (var retry = 0; retry < 3; retry++) Check(verifiedPolPath.TryRetry(LoginChec
 Check(!verifiedPolPath.TryRetry(LoginCheckpoint.MemberInformation, false), "pre-password retries stop at their bound");
 Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Connect, true) && !verifiedPolPath.TryRetry(LoginCheckpoint.PasswordEditor, false), "Enter retries cannot resubmit credentials or confirm an empty editor");
 Check(!verifiedPolPath.TryRetry(LoginCheckpoint.Connect, false), "Connect captures cannot authorize Enter retries into an editor that may have opened");
+var editorPath = new VerifiedPolEnterPath();
+editorPath.Begin(true);
+try { editorPath.RequestEditor(false); throw new Exception("Unverified editor opening allowed."); } catch (InvalidOperationException) { passed++; }
+Check(editorPath.RequestEditor(true) == 1, "verified Connect sends one editor activation Enter");
+try { editorPath.RequestEditor(true); throw new Exception("Duplicate editor opening allowed."); } catch (InvalidOperationException) { passed++; }
+Check(!editorPath.TryRetry(LoginCheckpoint.MemberInformation, false), "stale parent-screen OCR cannot send retry input after requesting the editor");
+Check(editorPath.WaitingForEditor(LoginCheckpoint.Connect, false) && editorPath.WaitingForEditor(LoginCheckpoint.MemberInformation, false),
+    "Connect and stale Login Information frames authorize readiness reads only after editor activation");
+Check(!editorPath.WaitingForEditor(LoginCheckpoint.PasswordEditor, false) && !editorPath.WaitingForEditor(LoginCheckpoint.Connect, true),
+    "read-only opening gate permits the recognized editor and one later credential submission");
 var staticPolMenu = new LoginFrame(640, 480, [new("Login Information", []), new("Member Information", []), new("Log In'", [new("Log", 102, 153.5, 28, 15.5), new("In'", 140, 153.5, 28.5, 13.5)]), new("Login", [new("Login", 326, 150.7, 42, 13.3)])]);
 Check(staticPolMenu.UniqueLine("Log In") == null && LoginCheckpoints.PolMenuButton(staticPolMenu, "Log In")?.Words[0].X == 102, "cropped Login Information heading cannot compete with the real left-menu Log In button");
 Check(LoginCheckpoints.PolMenuButton(staticPolMenu with { Lines = [..staticPolMenu.Lines, new("Log In", [new("Log In", 101, 154, 68, 15)])] }, "Log In") != null, "overlapping left-menu reads still resolve one physical button");

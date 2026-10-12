@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.19
+
+- Connect activates its default password field with exactly one Enter. The previous field click selected it without opening the editor.
+- The pre-password route now sends one Log In Enter and one editor-opening Enter, with no burst or Enter retries. Editor confirmation occurs only after password typing completes.
+
 ## 1.0.18
 
 - Highlighted Log In buttons can use the scalable Settings/Delete/Back menu layout when OCR misses the caption. Incomplete menu reads retry within bounds rather than failing immediately.

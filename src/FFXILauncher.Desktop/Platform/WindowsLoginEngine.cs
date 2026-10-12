@@ -583,6 +583,15 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     await Task.Delay(pollMs, cancellation);
                     continue;
                 }
+                if (polEnterPath.WaitingForEditor(stage, passwordEntered))
+                {
+                    // Old parent-screen OCR can finish after the editor opens.
+                    // It cannot authorize any input once opening has been requested.
+                    if (DateTimeOffset.UtcNow - stageSince >= TimeSpan.FromSeconds(3))
+                        throw new LoginSafetyException("The password editor did not become readable. No password was entered; inspect POL before retrying.");
+                    await Task.Delay(pollMs, cancellation);
+                    continue;
+                }
                 if (!memberSectionOnly && cachedLogInAt != null && stage == LoginCheckpoint.MemberInformation)
                 {
                     var logInPoint = LoginCheckpoints.PolLogInPoint(frame);
@@ -679,11 +688,6 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             await Task.Delay(50, cancellation); continue;
                         }
                     }
-                    if (stage == LoginCheckpoint.Connect && identityVerified && editorOpened && !passwordEntered &&
-                        DateTimeOffset.UtcNow - stageSince >= TimeSpan.FromSeconds(3))
-                        throw new LoginSafetyException("The password editor did not open. No password was entered; inspect POL before retrying.");
-                    // Once editor opening is requested, reread readiness only.
-                    // A stale Connect frame cannot justify more input into the software keyboard.
                     // FFXI can expose a menu before its first Enter is accepted.
                     // Retry only freshly recognized reversible menu transitions,
                     // never credentials or the final character confirmation.
@@ -806,9 +810,11 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             }
                             else
                             {
-                                var field = LoginCheckpoints.PasswordField(frame) ?? throw new LoginSafetyException("The Square Enix password field could not be located safely.");
-                                window.Click(field.X, field.Y, frame.Width, frame.Height); editorOpened = true;
-                                LogPolPathEvent("OpenPasswordFieldClick", stage);
+                                // Connect's default selection is the password field.
+                                // Send exactly one activation Enter, then readiness reads only.
+                                polEnterPath.RequestEditor(identityVerified);
+                                window.Key(0x0d); editorOpened = true;
+                                LogPolPathEvent("OpenPasswordEditorEnter", stage);
                             }
                             break;
                         case LoginCheckpoint.PasswordEditor:
