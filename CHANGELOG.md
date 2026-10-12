@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.0.2
+
+- Added a compressed, self-contained Windows executable with no loose DLL requirement.
+- Embedded installer, OCR helper, addon and license payloads, materialized automatically when needed.
+- Updated build identity for login validation so it works in both folder and single-file packages.
+
+Packaging changes require fresh complete login validation before unattended recovery for this build.
+
+
 ## 1.0.1
 
 - Added the MIT code license and separate FFXI artwork/trademark and dependency notices.

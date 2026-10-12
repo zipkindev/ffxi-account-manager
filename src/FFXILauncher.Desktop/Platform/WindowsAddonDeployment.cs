@@ -16,7 +16,7 @@ public static class WindowsAddonDeployment
         if (identity.User?.Value != args[2]) return 3;
         try
         {
-            WindowerAddonInstaller.Install(args[1], Path.Combine(AppContext.BaseDirectory, "windower_addons", "FFXIManager"));
+            WindowerAddonInstaller.Install(args[1], AppPayload.AddonDirectory);
             return 0;
         }
         catch (UnauthorizedAccessException) { return 5; }
@@ -25,14 +25,14 @@ public static class WindowsAddonDeployment
     public static async Task<AddonDeployment> InstallAsync(string windowerPath, Action requestingPermission)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Addon deployment requires Windows.");
-        var payload = Path.Combine(AppContext.BaseDirectory, "windower_addons", "FFXIManager");
+        var payload = AppPayload.AddonDirectory;
         try { return WindowerAddonInstaller.Install(windowerPath, payload); }
         catch (UnauthorizedAccessException)
         {
             requestingPermission();
             using var identity = WindowsIdentity.GetCurrent();
             var sid = identity.User?.Value ?? throw new InvalidOperationException("Windows user identity is unavailable.");
-            var executable = Path.Combine(AppContext.BaseDirectory, "FFXILauncher.Desktop.exe");
+            var executable = AppPayload.Executable;
             if (!File.Exists(executable)) throw new FileNotFoundException("The Windows deployment helper is missing. Use the complete Windows package.");
             var start = new ProcessStartInfo(executable) { UseShellExecute = true, Verb = "runas", WorkingDirectory = AppContext.BaseDirectory };
             start.ArgumentList.Add(HelperArgument);

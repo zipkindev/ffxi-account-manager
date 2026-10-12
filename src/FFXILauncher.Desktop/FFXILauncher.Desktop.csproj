@@ -9,11 +9,23 @@
   <ItemGroup><Content Include="Assets/Themes/SOURCES.md" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../CHANGELOG.md" LogicalName="FFXILauncher.ReleaseNotes" /></ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="../../LICENSE" LogicalName="FFXILauncher.License" />
-    <EmbeddedResource Include="../../ARTWORK-NOTICE.md" LogicalName="FFXILauncher.ArtworkNotice" />
-    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="FFXILauncher.ThirdPartyNotices" />
+    <EmbeddedResource Include="../../LICENSE" LogicalName="FFXILauncher.Payload.LICENSE" />
+    <EmbeddedResource Include="../../ARTWORK-NOTICE.md" LogicalName="FFXILauncher.Payload.ARTWORK-NOTICE.md" />
+    <EmbeddedResource Include="../../THIRD-PARTY-NOTICES.md" LogicalName="FFXILauncher.Payload.THIRD-PARTY-NOTICES.md" />
     <Content Include="../../LICENSE;../../ARTWORK-NOTICE.md;../../THIRD-PARTY-NOTICES.md" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="../../licenses/*" Link="licenses/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="Standalone" Value="$(PublishSingleFile)" />
+    <EmbeddedResource Include="../../tools/windows-ocr.ps1" LogicalName="FFXILauncher.Payload.tools/windows-ocr.ps1" />
+    <EmbeddedResource Include="../../tools/install-unattended.ps1" LogicalName="FFXILauncher.Payload.tools/install-unattended.ps1" />
+    <EmbeddedResource Include="../../windower_addons/FFXIManager/FFXIManager.lua" LogicalName="FFXILauncher.Payload.windower_addons/FFXIManager/FFXIManager.lua" />
+    <EmbeddedResource Include="../../licenses/*" LogicalName="FFXILauncher.Payload.licenses/%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Assets/Themes/SOURCES.md" LogicalName="FFXILauncher.Payload.Assets/Themes/SOURCES.md" />
+    <EmbeddedResource Include="Assets/Weather/SOURCES.md" LogicalName="FFXILauncher.Payload.Assets/Weather/SOURCES.md" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <Content Remove="@(Content)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../FFXILauncher.Core/FFXILauncher.Core.csproj" />

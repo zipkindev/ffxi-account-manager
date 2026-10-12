@@ -28,10 +28,24 @@ jobs:
       - name: Publish Windows build
         shell: pwsh
         run: ./tools/publish-windows.ps1
+      - name: Publish standalone executable
+        shell: pwsh
+        run: ./tools/publish-standalone.ps1
+      - name: Verify standalone helpers and native graphics
+        shell: pwsh
+        run: |
+          $resultPath = Join-Path $env:RUNNER_TEMP 'standalone-check.json'
+          $exe = (Resolve-Path 'artifacts/windows-standalone/FFXILauncher.Desktop.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList ('--package-check "' + $resultPath + '"') -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'Standalone package check failed.' }
+          $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
+          if (-not $result.Standalone -or -not $result.NativeImageDecoded -or -not $result.InstallerPrepared -or -not $result.LicensesAvailable -or $result.SupportFilesVerified -lt 10) { throw 'Standalone package is incomplete.' }
       - uses: actions/upload-artifact@v4
         with:
           name: ffxi-account-manager-windows-x64
-          path: artifacts/windows-x64/
+          path: |
+            artifacts/windows-x64/
+            artifacts/windows-standalone/
   addon:
     runs-on: ubuntu-latest
     steps:

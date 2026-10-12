@@ -10,7 +10,8 @@ internal static class AppRelease
 
     private static string Read(string name)
     {
-        using var stream = typeof(AppRelease).Assembly.GetManifestResourceStream("FFXILauncher." + name)
+        var resource = name switch { "License" => "Payload.LICENSE", "ArtworkNotice" => "Payload.ARTWORK-NOTICE.md", "ThirdPartyNotices" => "Payload.THIRD-PARTY-NOTICES.md", _ => name };
+        using var stream = typeof(AppRelease).Assembly.GetManifestResourceStream("FFXILauncher." + resource)
             ?? throw new InvalidOperationException("Bundled document is missing: " + name);
         using var reader = new StreamReader(stream);
         return reader.ReadToEnd();

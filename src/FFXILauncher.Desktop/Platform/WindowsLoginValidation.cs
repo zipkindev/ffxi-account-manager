@@ -10,7 +10,7 @@ internal static class WindowsLoginValidation
     private sealed record Proof(string Binding, string Build, DateTimeOffset VerifiedUtc);
     private static string Binding(AccountConfiguration account) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         System.Text.Json.JsonSerializer.Serialize(new { account.Id, account.SquareEnixId, account.Character, account.World, account.Profile, account.PolPasswordStoredInPol, account.MemberPasswordRequired, account.UsesOneTimePassword }))));
-    private static readonly Lazy<string> BuildHash = new(() => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(typeof(WindowsLoginValidation).Assembly.Location))));
+    private static readonly Lazy<string> BuildHash = new(() => AppPayload.BuildIdentity);
     private static string Build => BuildHash.Value;
     private static string ProofPath(string directory, AccountConfiguration account) => Path.Combine(directory, "login-validation", account.Id.ToString("N") + ".json");
     public static bool IsValidated(string directory, AccountConfiguration account)

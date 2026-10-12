@@ -46,7 +46,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
                 StandardOutputEncoding = System.Text.Encoding.UTF8, StandardErrorEncoding = System.Text.Encoding.UTF8 };
-            foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(AppContext.BaseDirectory, "tools", "windows-ocr.ps1"), "-ImagePath", framePath, "-Server" }) info.ArgumentList.Add(arg);
+            foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", AppPayload.FilePath("tools/windows-ocr.ps1"), "-ImagePath", framePath, "-Server" }) info.ArgumentList.Add(arg);
             ocr = Process.Start(info) ?? throw new LoginSafetyException("Windows OCR could not start.");
             // Drain diagnostics without logging potentially sensitive screen data.
             _ = ocr.StandardError.ReadToEndAsync();

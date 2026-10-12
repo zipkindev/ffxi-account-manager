@@ -6,6 +6,12 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--package-check")
+        {
+            try { BuildAvaloniaApp().SetupWithoutStarting(); File.WriteAllText(args[1], System.Text.Json.JsonSerializer.Serialize(AppPayload.VerifyPackage())); }
+            catch { Environment.ExitCode = 1; }
+            return;
+        }
         if (args.Length == 1 && args[0] == "--install-unattended")
         {
             try { Platform.WindowsUnattendedSetup.InstallAsync().GetAwaiter().GetResult(); }

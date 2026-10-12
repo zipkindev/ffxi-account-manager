@@ -39,13 +39,13 @@ Character stats and weather report once per minute. Session health heartbeats an
 
 ## Downloads and requirements
 
-Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). Extract the entire package before launching it. The self-contained build does not require a separate .NET installation.
+Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). The standalone `.exe` needs no ZIP extraction or separate .NET installation. A folder ZIP is also available; extract its entire contents before launching it. The self-contained build does not require a separate .NET installation.
 
 You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
 
 ## Windows setup
 
-Use the self-contained Windows package and keep its libraries beside `FFXILauncher.Desktop.exe`. The protected Windows installation creates a scheduled-task launch shortcut; setup requires administrator consent, while routine launches use the installed task.
+Run the standalone executable directly, or keep all files together if using the folder ZIP. The standalone app automatically materializes its OCR, installer, addon and license support files under `%LOCALAPPDATA%\FFXILauncher\app-payload`, while .NET extracts bundled native libraries into its Windows cache. The protected Windows installation creates a scheduled-task launch shortcut; setup requires administrator consent, while routine launches use the installed task.
 
 Windower and POL paths are detected automatically, with manual overrides in **Launcher paths**. Configure the SE ID and password; character/world and member mapping must be resolved before complete automated login. POL/local member passwords are conditional on your existing POL configuration. Unattended OTP login is not supported.
 
@@ -87,6 +87,8 @@ Publish a self-contained Windows build with PowerShell:
 
 ```powershell
 ./tools/publish-windows.ps1
+# Compressed standalone executable:
+./tools/publish-standalone.ps1
 ```
 
 Test the companion with Lua and an isolated temporary directory:

@@ -1157,7 +1157,7 @@ public sealed partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(configuration.WindowerPath)) return;
             var installed = Path.Combine(Path.GetDirectoryName(configuration.WindowerPath)!, "addons", "FFXIManager", "FFXIManager.lua");
-            var bundled = Path.Combine(AppContext.BaseDirectory, "windower_addons", "FFXIManager", "FFXIManager.lua");
+            var bundled = AppPayload.FilePath("windower_addons/FFXIManager/FFXIManager.lua");
             if (File.Exists(installed) && File.Exists(bundled) && !File.ReadAllBytes(installed).AsSpan().SequenceEqual(File.ReadAllBytes(bundled)))
                 InstallControlAddon(null, new RoutedEventArgs());
         }

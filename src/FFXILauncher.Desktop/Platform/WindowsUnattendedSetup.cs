@@ -19,7 +19,7 @@ public static class WindowsUnattendedSetup
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         using var identity = WindowsIdentity.GetCurrent();
-        var script = Path.Combine(AppContext.BaseDirectory, "tools", "install-unattended.ps1");
+        var script = Path.Combine(AppPayload.InstallSource(), "tools", "install-unattended.ps1");
         if (!File.Exists(script)) throw new InvalidOperationException("Extract the complete Windows release before installing unattended access.");
         var info = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
         { UseShellExecute = true, Verb = IsElevated ? "" : "runas", WindowStyle = ProcessWindowStyle.Hidden };
