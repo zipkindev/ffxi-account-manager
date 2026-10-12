@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.21
+
+- Startup zero HP no longer implies death. Confirmed death requires dead status plus zero HP outside Mog House/Mog Garden. Incomplete vitals display Alive with HP/MP pending.
+- Addon reports immediately on load/login and follows up after 15 seconds, then resumes minute reporting. Zone and life-state changes refresh immediately.
+- New live sessions no longer inherit a previous session’s dead snapshot while waiting for stats. Existing offline logout history is preserved.
+- Trained login input sequences and timings are unchanged.
+
 ## 1.0.20
 
 - Restored the trained POL route from v1.0.14: shared cached Log In clicks, control-cache learning, and the original password-field click retries and timings.

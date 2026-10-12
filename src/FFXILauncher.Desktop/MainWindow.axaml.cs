@@ -1039,9 +1039,11 @@ public sealed partial class MainWindow : Window
             try
             {
                 var state = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new CharacterStateReader(data).Read(account, now);
-                var heartbeat = state == null ? null : new ShutdownIpc(data!).ReadSession(account, now);
+                var heartbeat = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new ShutdownIpc(data).ReadSession(account, now);
+                if (heartbeat != null && sessions.TryGetValue(account.Id, out var tracked) && heartbeat.RegisteredUtc < tracked.StartedUtc.AddSeconds(-2)) heartbeat = null;
                 var live = state != null && state.LoggedOutUtc == null && heartbeat?.Nonce == state.Nonce && now - state.ReportedUtc <= TimeSpan.FromSeconds(75);
-                text.Text = state?.Describe(live, includeEnvironment: false) ?? "Player data pending · deploy/reload FFXIManager";
+                text.Text = !live && heartbeat != null ? "Current · Alive · player stats pending" :
+                    state?.Describe(live, includeEnvironment: false) ?? "Player data pending · deploy/reload FFXIManager";
                 if (characterWeather.TryGetValue(account.Id, out var weather))
                 {
                     weather.Children.Clear();
@@ -1058,7 +1060,7 @@ public sealed partial class MainWindow : Window
                     }
                     else weather.Children.Add(new TextBlock { Text = live ? "pending · reload FFXIManager" : "unknown", Foreground = ThemeCatalog.BrushFor("Muted") });
                 }
-                text.Foreground = state?.IsDead == true ? ThemeCatalog.BrushFor("Danger") : ThemeCatalog.BrushFor("Muted");
+                text.Foreground = state?.DeathConfirmed == true && (live || heartbeat == null) ? ThemeCatalog.BrushFor("Danger") : ThemeCatalog.BrushFor("Muted");
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
             { text.Text = "Player stats unavailable · " + ex.Message; }

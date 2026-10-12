@@ -3,15 +3,15 @@ local now = 1900000000
 local old_time = os.time
 os.time = function() return now end
 local events, commands = {}, {}
-package.loaded.resources = {servers = {[1] = {en = 'Odin'}}, zones = {[100] = {en = 'West Ronfaure'}}, weather = {[4] = {en = 'Rain'}}, days = {[1] = {en = 'Firesday'}}, moon_phases = {[2] = {en = 'Waxing Crescent'}}}
+package.loaded.resources = {servers = {[1] = {en = 'Odin'}}, zones = {[100] = {en = 'West Ronfaure'}, [280] = {en = 'Mog Garden'}}, weather = {[4] = {en = 'Rain'}}, days = {[1] = {en = 'Firesday'}}, moon_phases = {[2] = {en = 'Waxing Crescent'}}}
 package.loaded.packets = {parse = function(_, original) return original end}
 _addon = {}
-local logged_in, zone = true, 100
+local logged_in, zone, mog_house = true, 100, false
 local player = {main_job = 'DRK', main_job_id = 8, main_job_level = 99, sub_job = 'WAR', sub_job_id = 1, sub_job_level = 57, name = 'Hauplibond', status = 0, vitals = {hp = 1200, max_hp = 1500, mp = 200, max_mp = 500}}
 windower = {
     addon_path = root,
     packets = {last_incoming = function() return {['Main Job'] = 8, ['Master Level'] = 46} end},
-    ffxi = {get_info = function() return {logged_in = logged_in, server = 1, zone = zone, time = 1184, weather = 4, day = 1, moon_phase = 2, moon = 25} end,
+    ffxi = {get_info = function() return {logged_in = logged_in, server = 1, zone = zone, mog_house = mog_house, time = 1184, weather = 4, day = 1, moon_phase = 2, moon = 25} end,
             get_player = function() return logged_in and player or nil end},
     register_event = function(name, handler) events[name] = handler end,
     send_command = function(command) commands[#commands + 1] = command end,
@@ -27,6 +27,7 @@ local function read(path)
 end
 write('control.token', string.rep('a', 64))
 dofile('windower_addons/FFXIManager/FFXIManager.lua')
+assert(read('odin_hauplibond.state'), 'addon publishes immediately when loaded in an online character')
 events.prerender()
 local status = assert(read('odin_hauplibond.status'))
 local session = status:match('^([^\n]+)')
@@ -118,5 +119,41 @@ assert(read('odin_hauplibond.status'):match('^([^\n]+)') ~= session, 'new login 
 local before_unload = read('odin_hauplibond.state')
 events.unload()
 assert(read('odin_hauplibond.state') == before_unload, 'unload preserves snapshot without claiming logout')
+-- Startup zeros default to alive and are refreshed at fifteen seconds.
+player.status, player.vitals.hp, player.vitals.mp = 0, 0, 0
+now = now + 1
+events.login()
+assert(read('odin_hauplibond.state'):find('0\n1500\n0\n500\n0\n100\nWest Ronfaure', 1, true), 'zero startup HP without dead status is not death')
+local startup_state = read('odin_hauplibond.state')
+player.vitals.hp, player.vitals.mp = 1500, 500
+now = now + 14
+events.prerender()
+assert(read('odin_hauplibond.state') == startup_state, 'startup follow-up does not increase routine sampling to once per second')
+now = now + 1
+events.prerender()
+assert(read('odin_hauplibond.state'):find('1500\n1500\n500\n500\n0\n', 1, true), 'startup vitals refresh at fifteen seconds')
+local refreshed = read('odin_hauplibond.state')
+now = now + 59
+events.prerender()
+assert(read('odin_hauplibond.state') == refreshed, 'routine updates remain once per minute after startup follow-up')
+now = now + 1
+events.prerender()
+assert(read('odin_hauplibond.state') ~= refreshed, 'minute reporting resumes after startup follow-up')
+player.status, player.vitals.hp, zone = 2, 0, 280
+now = now + 1
+events['zone change']()
+assert(read('odin_hauplibond.state'):find('0\n1500\n500\n500\n0\n280\nMog Garden', 1, true), 'Mog Garden cannot report death from transient vitals/status')
+zone, mog_house = 100, true
+now = now + 1
+events['zone change']()
+assert(read('odin_hauplibond.state'):find('0\n1500\n500\n500\n0\n100\n', 1, true), 'Mog House flag suppresses transient death')
+mog_house = false
+now = now + 1
+events['status change']()
+assert(read('odin_hauplibond.state'):find('0\n1500\n500\n500\n1\n100\n', 1, true), 'confirmed dead status and zero HP update immediately outside safe areas')
+player.status, player.vitals.hp = 0, 1500
+now = now + 1
+events['status change']()
+assert(read('odin_hauplibond.state'):find('1500\n1500\n500\n500\n0\n100\n', 1, true), 'revival reports immediately instead of waiting a minute')
 os.time = old_time
 print('PASS: addon authentication, session binding, expiry, allowlist, at-most-once shutdown, and logout cleanup')

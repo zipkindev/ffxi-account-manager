@@ -345,6 +345,22 @@ File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.state"), playerState
 typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
 if (!PlayerText().Contains("Last logout · West Ronfaure · Dead at logout")) throw new Exception("Dead logout state missing from card after heartbeat removal.");
 Console.WriteLine("PASS: cards show current player vitals and preserve dead logout zone/stats after heartbeat removal.");
+var statusFile = Path.Combine(playerData, "odin_hauplibond.status");
+var stateFile = Path.Combine(playerData, "odin_hauplibond.state");
+var savedLogoutState = File.ReadAllText(stateFile);
+var newPlayerPayload = playerPayload.Replace(playerPayload.Split('\n')[0], new string('b', 32));
+File.WriteAllText(statusFile, newPlayerPayload);
+typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
+if (PlayerText() != "Current · Alive · player stats pending") throw new Exception("A fresh session must not inherit the old session's dead logout state.");
+File.WriteAllText(statusFile, playerPayload);
+File.WriteAllText(stateFile, playerStatePayload.Replace("100\nWest Ronfaure", "280\nMog Garden") + "0\n");
+typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
+if (!PlayerText().Contains("Current · Mog Garden · Alive · HP/MP pending") || PlayerText().Contains("Dead"))
+    throw new Exception("Legacy Mog Garden death must be suppressed without inventing vitals.");
+File.Delete(statusFile);
+File.WriteAllText(stateFile, savedLogoutState);
+typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
+Console.WriteLine("PASS: new session defaults alive without stale death, and Mog Garden suppresses legacy false death.");
 var toggles = configured.GetLogicalDescendants().OfType<ToggleSwitch>().ToArray();
 if (toggles.Length != 6) throw new Exception("Auto login and maintenance require separate controls.");
 var autoToggle = toggles.First(t => Equals(t.Content, "Auto login"));

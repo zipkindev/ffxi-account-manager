@@ -251,6 +251,13 @@ try
     var state = stateReader.Read(maintainedAccount, now)!;
     Check(state.IsDead && state.Hp == 0 && state.Mp == 200 && state.Zone == "West Ronfaure", "player stats death and zone parsed");
     Check(state.Describe(true).Contains("Current · West Ronfaure · Dead"), "live death displayed");
+    Check(!(state with { ZoneId = 280, Zone = "Mog Garden" }).DeathConfirmed &&
+        (state with { ZoneId = 280, Zone = "Mog Garden" }).Describe(true).Contains("Alive · HP/MP pending"),
+        "legacy zero-HP Mog Garden report cannot claim death or show missing vitals as confirmed");
+    Check(!(state with { Zone = "Mog House" }).DeathConfirmed, "Mog House report cannot claim death");
+    Check(!(state with { Hp = 1500 }).DeathConfirmed, "positive HP overrides a stale death flag");
+    Check(!(state with { IsDead = false }).DeathConfirmed && (state with { IsDead = false }).Describe(true).Contains("Alive · HP/MP pending"),
+        "zero startup HP without confirmed death defaults alive with vitals pending");
     var jobsPayload = $"{sessionNonce}\nHauplibond\nOdin\n{now.AddMinutes(-1).ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n46\nDRK\n99\nWAR\n57\n";
     File.WriteAllText(stem + ".jobs", jobsPayload);
     Check(stateReader.Read(maintainedAccount, now)!.Describe(true).StartsWith("ML 46 99DRK/57WAR\n"), "actual job levels and master level use the requested compact format");

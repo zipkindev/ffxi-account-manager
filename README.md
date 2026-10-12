@@ -123,3 +123,7 @@ FINAL FANTASY is a registered trademark of Square Enix Holdings Co., Ltd.
 ### Login route changes
 
 The trained POL action sequence and timings use v1.0.14 as the working baseline. Shared Log In control replay, password-field clicks with their existing bounded retries, password typing, and the learned FFXI Enter path must be preserved when correcting scaling or OCR. A proposed sequence change requires a focused successful trial before replacing that route, followed by one full login per enabled account without authentication retries. A failed trial stays out of the binary release. The stop control remains available throughout testing.
+
+### Character reports
+
+FFXIManager publishes player data immediately when loaded or when the character logs in, refreshes it after 15 seconds, then resumes once-per-minute display reports. Zone and life-state changes also refresh the display; the control heartbeat is independent. Startup zero HP does not imply death. Death requires a dead player status plus zero HP, and Mog House/Mog Garden reports default alive. Missing startup vitals are shown as pending rather than as confirmed zero values. Running games need one `//lua reload FFXIManager` after an addon update; new sessions load it automatically.

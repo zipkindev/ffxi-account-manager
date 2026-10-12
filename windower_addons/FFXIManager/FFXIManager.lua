@@ -1,6 +1,6 @@
 _addon.name = 'FFXIManager'
 _addon.author = 'FFXI Account Manager'
-_addon.version = '0.3.5'
+_addon.version = '0.3.6'
 _addon.commands = {'ffximanager'}
 local resources = require('resources')
 local packets = require('packets')
@@ -9,6 +9,7 @@ local session = tostring(os.time()) .. '_' .. tostring({}):gsub('[^0-9a-f]', '')
 local registered = os.time()
 local last_poll = 0
 local last_report = nil
+local startup_followup_at = nil
 local master = nil
 local seen_nonces = {}
 local stem = nil
@@ -54,9 +55,12 @@ local function capture(character, world, player, info, now)
     local v = player.vitals
     -- Ignore incomplete data while zoning; preserve the last usable report.
     if not v or not v.hp or not v.max_hp or not v.mp or not v.max_mp or not info.zone or info.zone == 0 then return end
+    if v.max_hp <= 0 or v.hp < 0 or v.hp > v.max_hp or v.mp < 0 or v.max_mp < 0 or v.mp > v.max_mp then return end
     local zone = resources.zones and resources.zones[info.zone]
     local name = (zone and zone.en or ('Zone ' .. info.zone)):gsub('[\r\n]', ' '):sub(1, 256)
-    local dead = player.status == 2 or player.status == 3 or v.hp == 0
+    -- Zero HP can be an incomplete startup sample, not death evidence.
+    local safe_area = info.mog_house == true or info.zone == 280
+    local dead = not safe_area and v.hp == 0 and (player.status == 2 or player.status == 3)
     last_state = table.concat({session, character, world, registered, now, v.hp, v.max_hp, v.mp, v.max_mp,
         dead and '1' or '0', info.zone, name}, '\n') .. '\n'
     write(root .. stem .. '.state', last_state .. '0\n')
@@ -104,9 +108,11 @@ local function poll()
     write(root .. stem .. '.status', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. now .. '\n')
     -- Stats and environment are sampled once per minute. Keep control polling
     -- and the lightweight health heartbeat independent of display reporting.
-    if not last_report or now - last_report >= 60 then
+    if not last_report then startup_followup_at = now + 15 end
+    if not last_report or now - last_report >= 60 or (startup_followup_at and now >= startup_followup_at) then
         capture(character, world, player, info, now)
         last_report = now
+        if startup_followup_at and now >= startup_followup_at then startup_followup_at = nil end
     end
     local request_path = root .. stem .. '.request'
     local payload = read(request_path)
@@ -152,8 +158,20 @@ local function report_change()
     local character, world, player, info = identity()
     if not character then return end
     stem = world:lower() .. '_' .. character:lower()
-    capture(character, world, player, info, os.time())
+    local now = os.time()
+    capture(character, world, player, info, now)
+    last_report = now
 end
+local function startup_report()
+    last_report = nil
+    startup_followup_at = nil
+    last_poll = 0
+    poll()
+end
+windower.register_event('load', startup_report)
+windower.register_event('login', startup_report)
+windower.register_event('zone change', startup_report)
+windower.register_event('status change', report_change)
 windower.register_event('logout', function()
     report_change()
     -- Player data may already be unavailable here. Keep the last observed vitals/zone.
@@ -164,6 +182,7 @@ windower.register_event('logout', function()
     clear()
     last_state = nil
     last_report = nil
+    startup_followup_at = nil
     master = nil
     shutdown_pending_until = 0
     stem = nil
@@ -191,3 +210,6 @@ windower.register_event('incoming chunk', function(id, original, modified, injec
     local alert_stem = world:lower() .. '_' .. character:lower()
     write(root .. alert_stem .. '.alert', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. os.time() .. '\nincoming-017-system\n' .. message .. '\n')
 end)
+
+-- Loading while already logged in should publish immediately, before prerender.
+poll()

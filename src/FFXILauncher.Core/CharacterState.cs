@@ -5,11 +5,14 @@ namespace FFXILauncher.Core;
 public sealed record CharacterState(string Nonce, DateTimeOffset ReportedUtc, int Hp, int MaxHp,
     int Mp, int MaxMp, bool IsDead, int ZoneId, string Zone, DateTimeOffset? LoggedOutUtc, ZoneEnvironment? Environment = null, CharacterJobs? Jobs = null)
 {
+    public bool DeathConfirmed => IsDead && Hp == 0 && ZoneId != 280 &&
+        !Zone.Equals("Mog House", StringComparison.OrdinalIgnoreCase) && !Zone.Equals("Mog Garden", StringComparison.OrdinalIgnoreCase);
     public string Describe(bool live, bool includeEnvironment = true)
     {
-        var condition = IsDead ? (LoggedOutUtc != null ? "Dead at logout" : "Dead") : "Alive";
+        var condition = DeathConfirmed ? (LoggedOutUtc != null ? "Dead at logout" : "Dead") : "Alive";
         var prefix = live ? "Current" : LoggedOutUtc != null ? "Last logout" : "Last reported";
-        var text = $"{prefix} · {Zone} · {condition} · HP {Hp}/{MaxHp} · MP {Mp}/{MaxMp}";
+        var vitals = Hp == 0 && !DeathConfirmed ? "HP/MP pending" : $"HP {Hp}/{MaxHp} · MP {Mp}/{MaxMp}";
+        var text = $"{prefix} · {Zone} · {condition} · {vitals}";
         if (live && includeEnvironment) text += Environment is {} environment ? "\n" + environment.Describe() : "\nWeather / Vana’diel time / moon pending · reload FFXIManager";
         if (!live) text += $"\nStats reported {ReportedUtc.ToLocalTime():g}";
         if (LoggedOutUtc is { } logout) text += $" · Logged out {logout.ToLocalTime():g}";
