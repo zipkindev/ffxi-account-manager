@@ -1,5 +1,13 @@
 # Release notes
 
+## 1.0.8
+
+- Added current main job, subjob, their levels and master level to character cards, formatted as ML 46 99DRK/57WAR.
+- Job telemetry shares the once-per-minute reporting cycle and retains the last report offline.
+- Master level is read passively from Windower’s server-stat packets; missing values are shown as unknown.
+- Companion addon updated to 0.3.5; running games need an addon reload to enable job reports.
+
+
 ## 1.0.7
 
 - Moved card-alert display controls into Server maintenance.

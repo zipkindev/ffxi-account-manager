@@ -251,6 +251,19 @@ try
     var state = stateReader.Read(maintainedAccount, now)!;
     Check(state.IsDead && state.Hp == 0 && state.Mp == 200 && state.Zone == "West Ronfaure", "player stats death and zone parsed");
     Check(state.Describe(true).Contains("Current · West Ronfaure · Dead"), "live death displayed");
+    var jobsPayload = $"{sessionNonce}\nHauplibond\nOdin\n{now.AddMinutes(-1).ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n46\nDRK\n99\nWAR\n57\n";
+    File.WriteAllText(stem + ".jobs", jobsPayload);
+    Check(stateReader.Read(maintainedAccount, now)!.Describe(true).StartsWith("ML 46 99DRK/57WAR\n"), "actual job levels and master level use the requested compact format");
+    foreach (var invalidJobs in new[] { jobsPayload.Replace(sessionNonce, "different_session"), jobsPayload.Replace("Hauplibond", "Otherchar"), jobsPayload.Replace("Odin", "Asura"), jobsPayload.Replace(now.ToUnixTimeSeconds().ToString(), now.AddSeconds(-1).ToUnixTimeSeconds().ToString()), jobsPayload.Replace("\n46\n", "\n51\n"), jobsPayload.Replace("DRK", "XYZ"), jobsPayload.Replace("\n99\n", "\n100\n"), jobsPayload.Replace("\n57\n", "\n0\n"), jobsPayload + "extra\n" })
+    {
+        File.WriteAllText(stem + ".jobs", invalidJobs);
+        Check(stateReader.Read(maintainedAccount, now) is { Jobs: null, MaxHp: 1500 }, "invalid or mismatched jobs do not replace valid vitals");
+    }
+    File.WriteAllText(stem + ".jobs", jobsPayload.Replace("\n46\n", "\n-1\n"));
+    Check(stateReader.Read(maintainedAccount, now)!.Jobs!.Describe() == "ML ? 99DRK/57WAR", "unknown master level is not fabricated");
+    File.WriteAllText(stem + ".jobs", jobsPayload.Replace("\n99\n", "\n50\n").Replace("WAR\n57", "NON\n0"));
+    Check(stateReader.Read(maintainedAccount, now)!.Jobs!.Describe() == "50DRK", "lower level character without subjob omits master and subjob");
+    File.WriteAllText(stem + ".jobs", jobsPayload);
     var environmentPayload = $"{sessionNonce}\nHauplibond\nOdin\n{now.AddMinutes(-1).ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n100\nRain\n1184\nFiresday\nWaxing Crescent\n25\n";
     File.WriteAllText(stem + ".environment", environmentPayload);
     Check(stateReader.Read(maintainedAccount, now)!.Describe(true).Contains("Weather: Rain · Vana’diel: 19:44 Firesday · Moon: Waxing Crescent (25%)"), "live zone weather game time and moon shown from matching report");

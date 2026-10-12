@@ -1,6 +1,6 @@
 _addon.name = 'FFXIManager'
 _addon.author = 'FFXI Account Manager'
-_addon.version = '0.3.4'
+_addon.version = '0.3.5'
 _addon.commands = {'ffximanager'}
 local resources = require('resources')
 local packets = require('packets')
@@ -9,6 +9,7 @@ local session = tostring(os.time()) .. '_' .. tostring({}):gsub('[^0-9a-f]', '')
 local registered = os.time()
 local last_poll = 0
 local last_report = nil
+local master = nil
 local seen_nonces = {}
 local stem = nil
 local last_state = nil
@@ -39,6 +40,16 @@ local function identity()
     if not world or not player.name:match('^[A-Za-z]+$') or not world:match('^[A-Za-z]+$') then return nil end
     return player.name, world, player, info
 end
+local function capture_master(original)
+    local character, world, player = identity()
+    if not character then return end
+    local ok, packet = pcall(packets.parse, 'incoming', original)
+    if not ok or not packet or packet['Main Job'] ~= player.main_job_id then return end
+    local level = packet['Master Level']
+    if type(level) == 'number' and level >= 0 and level <= 50 and level % 1 == 0 then
+        master = {character = character, world = world, job = player.main_job_id, level = level}
+    end
+end
 local function capture(character, world, player, info, now)
     local v = player.vitals
     -- Ignore incomplete data while zoning; preserve the last usable report.
@@ -49,6 +60,23 @@ local function capture(character, world, player, info, now)
     last_state = table.concat({session, character, world, registered, now, v.hp, v.max_hp, v.mp, v.max_mp,
         dead and '1' or '0', info.zone, name}, '\n') .. '\n'
     write(root .. stem .. '.state', last_state .. '0\n')
+    -- Read existing player data and cached server stats; no server requests.
+    if not master or master.character ~= character or master.world ~= world or master.job ~= player.main_job_id then
+        if windower.packets and windower.packets.last_incoming then
+            local ok, original = pcall(windower.packets.last_incoming, 0x061)
+            if ok and original then capture_master(original) end
+        end
+    end
+    local main, sub = player.main_job, player.sub_job
+    local main_level, sub_level = player.main_job_level, player.sub_job_level
+    if type(main) == 'string' and main:match('^[A-Z][A-Z][A-Z]$') and
+        type(sub) == 'string' and sub:match('^[A-Z][A-Z][A-Z]$') and
+        type(main_level) == 'number' and main_level >= 1 and main_level <= 99 and main_level % 1 == 0 and
+        type(sub_level) == 'number' and sub_level >= 0 and sub_level <= 99 and sub_level % 1 == 0 then
+        local ml = master and master.character == character and master.world == world and master.job == player.main_job_id and master.level or -1
+        write(root .. stem .. '.jobs', table.concat({session, character, world, registered, now,
+            ml, main, main_level, sub, sub_level}, '\n') .. '\n')
+    end
     -- Zone environment uses the same session and report time as the vitals.
     -- It is independent of shutdown state so older managers remain compatible.
     local function label(collection, id)
@@ -136,6 +164,7 @@ windower.register_event('logout', function()
     clear()
     last_state = nil
     last_report = nil
+    master = nil
     shutdown_pending_until = 0
     stem = nil
     registered = os.time()
@@ -145,7 +174,9 @@ windower.register_event('unload', clear)
 
 -- Observe original server system messages only; never persist player chat or injected packets.
 windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
-    if id ~= 0x017 or injected then return end
+    if injected or blocked then return end
+    if id == 0x061 then capture_master(original); return end
+    if id ~= 0x017 then return end
     local ok, packet = pcall(packets.parse, 'incoming', original)
     if not ok or not packet or (packet.Mode ~= 6 and packet.Mode ~= 7) then return end
     local message = packet.Message

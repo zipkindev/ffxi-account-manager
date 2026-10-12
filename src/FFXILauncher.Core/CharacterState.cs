@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace FFXILauncher.Core;
 
 public sealed record CharacterState(string Nonce, DateTimeOffset ReportedUtc, int Hp, int MaxHp,
-    int Mp, int MaxMp, bool IsDead, int ZoneId, string Zone, DateTimeOffset? LoggedOutUtc, ZoneEnvironment? Environment = null)
+    int Mp, int MaxMp, bool IsDead, int ZoneId, string Zone, DateTimeOffset? LoggedOutUtc, ZoneEnvironment? Environment = null, CharacterJobs? Jobs = null)
 {
     public string Describe(bool live, bool includeEnvironment = true)
     {
@@ -13,8 +13,16 @@ public sealed record CharacterState(string Nonce, DateTimeOffset ReportedUtc, in
         if (live && includeEnvironment) text += Environment is {} environment ? "\n" + environment.Describe() : "\nWeather / Vana’diel time / moon pending · reload FFXIManager";
         if (!live) text += $"\nStats reported {ReportedUtc.ToLocalTime():g}";
         if (LoggedOutUtc is { } logout) text += $" · Logged out {logout.ToLocalTime():g}";
+        if (Jobs != null) text = (live ? "" : "Last job · ") + Jobs.Describe() + "\n" + text;
         return text;
     }
+}
+
+public sealed record CharacterJobs(int? MasterLevel, string MainJob, int MainLevel, string SubJob, int SubLevel)
+{
+    internal static readonly HashSet<string> JobNames = new("WAR MNK WHM BLM RDM THF PLD DRK BST BRD RNG SAM NIN DRG SMN BLU COR PUP DNC SCH GEO RUN NON".Split(' '));
+    public string Describe() => (MainLevel == 99 ? $"ML {(MasterLevel is {} master ? master.ToString() : "?")} " : "") +
+        $"{MainLevel}{MainJob}" + (SubJob == "NON" ? "" : $"/{SubLevel}{SubJob}");
 }
 
 public sealed record ZoneEnvironment(string Weather, int TimeMinutes, string Day, string MoonPhase, int MoonPercent)
@@ -52,9 +60,28 @@ public sealed class CharacterStateReader(string dataDirectory)
             DateTimeOffset? logout = loggedOut == 0 ? null : DateTimeOffset.FromUnixTimeSeconds(loggedOut);
             if (start > report || report > now.AddSeconds(3) || logout < report || logout > now.AddSeconds(3)) return null;
             return new(lines[0], report, hp, maxHp, mp, maxMp, lines[9] == "1", zoneId, lines[11], logout,
-                ReadEnvironment(Path.ChangeExtension(path, ".environment"), lines, zoneId));
+                ReadEnvironment(Path.ChangeExtension(path, ".environment"), lines, zoneId),
+                ReadJobs(Path.ChangeExtension(path, ".jobs"), lines));
         }
         catch (ArgumentOutOfRangeException) { return null; }
+    }
+    private static CharacterJobs? ReadJobs(string path, string[] state)
+    {
+        try
+        {
+            if (!File.Exists(path) || new FileInfo(path).Length > 4096) return null;
+            var lines = File.ReadAllLines(path);
+            if (lines.Length != 10 || !lines.Take(5).SequenceEqual(state.Take(5)) ||
+                !int.TryParse(lines[5], out var master) || master is < -1 or > 50 ||
+                !CharacterJobs.JobNames.Contains(lines[6]) || lines[6] == "NON" ||
+                !int.TryParse(lines[7], out var mainLevel) || mainLevel is < 1 or > 99 ||
+                !CharacterJobs.JobNames.Contains(lines[8]) ||
+                !int.TryParse(lines[9], out var subLevel) || subLevel is < 0 or > 99 ||
+                (lines[8] == "NON") != (subLevel == 0)) return null;
+            return new(master < 0 ? null : master, lines[6], mainLevel, lines[8], subLevel);
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
     private static ZoneEnvironment? ReadEnvironment(string path, string[] state, int zoneId)
     {

@@ -298,6 +298,7 @@ var playerPayload = $"{playerNonce}\nHauplibond\nOdin\n{playerTime - 60}\n{playe
 var playerStatePayload = playerPayload + "0\n1500\n200\n500\n1\n100\nWest Ronfaure\n";
 File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.status"), playerPayload);
 File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.state"), playerStatePayload + "0\n");
+File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.jobs"), playerPayload + "46\nDRK\n99\nWAR\n57\n");
 File.WriteAllText(Path.Combine(playerData, "odin_hauplibond.environment"), playerPayload + "100\nRain\n1184\nFiresday\nWaxing Crescent\n25\n");
 new ConfigurationStore(directory).Save(new(Path.Combine(directory, "Windower.exe"), "", [mainAccount, secondAccount]));
 var scheduleTime = DateTimeOffset.UtcNow;
@@ -315,6 +316,7 @@ if (configured.GetLogicalDescendants().OfType<Button>().Any(b => Equals(b.Conten
 if (configured.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "Launch_" + mainAccount.Id.ToString("N")).Content?.ToString() != "Launch profile")
     throw new Exception("Account launch control is missing.");
 string PlayerText() => configured.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "CharacterState_" + mainAccount.Id.ToString("N")).Text!;
+if (!PlayerText().StartsWith("ML 46 99DRK/57WAR\n")) throw new Exception("Job summary missing from character card.");
 if (!PlayerText().Contains("Current · West Ronfaure · Dead · HP 0/1500 · MP 200/500")) throw new Exception("Current player stats missing from card.");
 var weatherPanel = configured.GetLogicalDescendants().OfType<StackPanel>().Single(p => p.Name == "Weather_" + mainAccount.Id.ToString("N"));
 if (!weatherPanel.Children.OfType<TextBlock>().Any(t => t.Text == "Rain · Water ×1 (single)") || weatherPanel.Children.OfType<Image>().Count() != 1) throw new Exception("Single Rain must show one game weather icon and its element.");

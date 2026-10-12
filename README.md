@@ -35,9 +35,10 @@ Select cards, then expand **Bulk actions** to apply settings or request graceful
 - Gracefully shut down individual or grouped sessions, cancel pending shutdowns, and clean up disconnected POL processes. Explicit Force close is available for attached hung sessions.
 - Track official global/world maintenance notices in your local time zone, schedule downtime and pause reconnection attempts during maintenance. The companion also observes in-game emergency warnings. In **Server maintenance**, choose whether to show card alerts and set one global 0–168-hour advance-notice threshold (default 12; 0 shows active maintenance only). Every account uses that threshold for its applicable notices. Matching-world notices take precedence over global notices; the main section retains the full schedule and in-game alerts. These display preferences do not change scheduling or reconnect protection.
 - Choose saved UI/artwork themes, landscape account cards, and drag-to-reorder account order.
+- Show current jobs and levels in the form **ML 46 99DRK/57WAR**, with last-observed jobs retained offline.
 - Show shared Vana’diel time, weekday element and moon phase; display per-character zone weather with single/double element icons.
 
-Character stats and weather report once per minute. Session health heartbeats and IPC command checks remain separate, and logout is reported immediately. Offline cards retain their last observation rather than claiming current weather.
+Character stats, jobs and weather report once per minute. Master level comes from cached/passively observed server-stat packets; an unavailable master level is displayed as unknown. Session health heartbeats and IPC command checks remain separate, and logout is reported immediately. Offline cards retain their last observation rather than claiming current weather.
 
 ## Downloads and requirements
 
