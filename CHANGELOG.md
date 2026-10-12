@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.5
+
+- Made per-character maintenance panel backgrounds 50% transparent while preserving full-opacity text.
+
+
 ## 1.0.4
 
 - Reduced the shading over landscape cards so the image is the primary card background.

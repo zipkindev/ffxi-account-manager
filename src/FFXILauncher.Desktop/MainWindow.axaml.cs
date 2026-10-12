@@ -432,7 +432,8 @@ public sealed partial class MainWindow : Window
             body.Children.Add(header);
             var schedule = new TextBlock { Name = "CharacterMaintenance_" + account.Id.ToString("N"), Foreground = ThemeCatalog.BrushFor("Muted"), TextWrapping = TextWrapping.Wrap };
             characterMaintenance[account.Id] = schedule;
-            body.Children.Add(new Border { Background = ThemeCatalog.BrushFor("Inset"), CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 6), Child = schedule });
+            var maintenanceColor = Color.Parse(ThemeCatalog.Resolve(configuration.Theme).Inset);
+            body.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(127, maintenanceColor.R, maintenanceColor.G, maintenanceColor.B)), CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 6), Child = schedule });
             var status = new TextBlock { Text = "Ready to launch · " + (vault.Contains(account.Id) ? "Credentials saved" : "No saved credentials"), Foreground = ThemeCatalog.BrushFor("Accent") };
             statuses[account.Id] = status;
             body.Children.Add(status);
