@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.0.9
+
+- Widened the maintenance advance-notice hour editor so its full value remains readable alongside the spinner buttons, including the maximum 168 hours.
+
 ## 1.0.8
 
 - Added current main job, subjob, their levels and master level to character cards, formatted as ML 46 99DRK/57WAR.

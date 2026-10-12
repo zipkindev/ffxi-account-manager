@@ -90,7 +90,7 @@
           <CheckBox x:Name="ShowCardMaintenanceToggle" Content="Show maintenance alerts on character cards" IsCheckedChanged="CardMaintenanceChanged" ToolTip.Tip="Only changes card visibility; this section and maintenance scheduling remain active." />
           <StackPanel Orientation="Horizontal" Spacing="8">
             <TextBlock Text="Show card alerts" VerticalAlignment="Center" Classes="muted" />
-            <NumericUpDown x:Name="CardMaintenanceHoursInput" Minimum="0" Maximum="168" Increment="1" FormatString="0" Width="90" ValueChanged="CardMaintenanceHoursChanged" />
+            <NumericUpDown x:Name="CardMaintenanceHoursInput" Minimum="0" Maximum="168" Increment="1" FormatString="0" Width="144" Padding="8,4" ValueChanged="CardMaintenanceHoursChanged" />
             <TextBlock Text="hours before start · 0 = active only" VerticalAlignment="Center" Classes="muted" />
           </StackPanel>
           <TextBlock x:Name="MaintenanceStatus" Text="Official maintenance notices have not been checked." Classes="muted" TextWrapping="Wrap" />
