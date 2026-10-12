@@ -6,15 +6,15 @@ public sealed class VerifiedPolEnterPath
 {
     private readonly Dictionary<LoginCheckpoint, int> retries = [];
     public bool Started { get; private set; }
-    public int Begin(bool exactMemberSelected, bool stopAtConnect = false)
+    public int Begin(bool exactMemberSelected)
     {
         if (!exactMemberSelected || Started) throw new InvalidOperationException("A fresh exact-ID member selection is required for the POL Enter path.");
         Started = true;
-        return stopAtConnect ? 1 : 2;
+        return 1;
     }
     public bool TryRetry(LoginCheckpoint checkpoint, bool passwordEntered)
     {
-        if (!Started || passwordEntered || checkpoint is not (LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect)) return false;
+        if (!Started || passwordEntered || checkpoint != LoginCheckpoint.MemberInformation) return false;
         var count = retries.GetValueOrDefault(checkpoint);
         if (count >= 3) return false;
         retries[checkpoint] = count + 1;

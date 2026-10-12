@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.17
+
+- Removed the speculative pre-password Enter burst and restored the previously working password-field click. Login Information uses one Enter after exact member selection, without repeating account validation.
+- Log In retries use its control; after requesting the password editor, only readiness reads continue. No additional opening input is sent into the software keyboard. Credential-free action logs record the actual route.
+- POL-5311 is recognized as an explicit credential rejection; no authentication retry is performed.
+
 ## 1.0.16
 
 - The Auto login button pulses while automatic login runs and changes to Stop auto logins. Clicking it cancels all queued and active automatic logins without closing POL or game sessions.

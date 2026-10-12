@@ -226,7 +226,7 @@ public static class LoginCheckpoints
         return (x, y);
     }
     public static bool IsCredentialRejection(LoginFrame frame) =>
-        frame.Has("Incorrect password") || frame.Has("Invalid password") || frame.Has("Wrong password") ||
+        frame.Has("POL-5311") || frame.Has("password entered is incorrect") || frame.Has("Incorrect password") || frame.Has("Invalid password") || frame.Has("Wrong password") ||
         frame.Has("password is incorrect") || frame.Has("password is invalid") || frame.Has("ID or password are incorrect");
     public static LoginCheckpoint Recognize(LoginFrame frame)
     {

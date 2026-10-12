@@ -20,7 +20,6 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
     private string[] selectedMemberLabels = [];
     private bool SelectedMemberMatches(LoginFrame frame) => selectedMemberLabels.Any(label => LoginCheckpoints.SelectedMemberLabelMatches(frame, label));
     private bool returnedToMemberList;
-    private int passwordFieldRetries;
     private int memberSelectionRetries;
     private bool memberSelectedByExactId;
     private async Task<LoginFrame> ReadFrame(CancellationToken cancellation, bool loadingOnly = false, bool confirmationOnly = false, bool characterGridOnly = false)
@@ -438,24 +437,6 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     if (++confirmationPolls % 12 != 0 && DateTimeOffset.UtcNow - lastCharacterSelection < TimeSpan.FromSeconds(2))
                     { await Task.Delay(characterPollMs, cancellation); continue; }
                 }
-                if (previous == LoginCheckpoint.MemberList && memberSelectedByExactId && !polEnterPath.Started && !passwordEntered)
-                {
-                    dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                    try
-                    {
-                        window.Capture(framePath);
-                        if (window.IsGameWindow) throw new LoginSafetyException("The verified POL member path changed windows before input.");
-                        var count = polEnterPath.Begin(memberSelectedByExactId, memberSectionOnly);
-                        for (var i = 0; i < count; i++) { cancellation.ThrowIfCancellationRequested(); window.Key(0x0d); }
-                        identityVerified = true;
-                        editorOpened = !memberSectionOnly;
-                        cachedLogInAt = DateTimeOffset.UtcNow;
-                        RecordAction(LoginCheckpoint.MemberInformation);
-                        LogPolPathEvent("VerifiedEnterPair", LoginCheckpoint.MemberList);
-                        report("Following verified POL member path: Enter for Log In, then Enter for password entry…");
-                    }
-                    finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
-                }
                 if (trainingSection != "continue" && previous == LoginCheckpoint.Title && replayPath != null && characterConfirmAttempts == 0)
                 {
                     dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
@@ -609,11 +590,11 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                         if (!polEnterPath.TryRetry(stage, passwordEntered))
                             throw new LoginSafetyException("POL Log In did not advance after bounded Enter retries. No credentials submitted.");
                         dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                        try { window.Key(0x0d); }
+                        try { Click(frame, "Log In"); }
                         finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
                         cachedLogInAt = DateTimeOffset.UtcNow;
-                        LogPolPathEvent("RetryLogInEnter", stage);
-                        report("Retrying Enter on the unchanged verified POL Log In screen…");
+                        LogPolPathEvent("RetryLogInClick", stage);
+                        report("Retrying the unchanged verified POL Log In control…");
                     }
                     await Task.Delay(pollMs, cancellation);
                     continue;
@@ -696,19 +677,10 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                         }
                     }
                     if (stage == LoginCheckpoint.Connect && identityVerified && editorOpened && !passwordEntered &&
-                        DateTimeOffset.UtcNow - stageSince >= TimeSpan.FromMilliseconds(500 * (passwordFieldRetries + 1)) && passwordFieldRetries < 3)
-                    {
-                        if (polEnterPath.TryRetry(stage, passwordEntered))
-                        {
-                            dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                            try { window.Key(0x0d); }
-                            finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
-                            passwordFieldRetries++;
-                            LogPolPathEvent("RetryPasswordEditorEnter", stage);
-                            report("Retrying Enter to open the unchanged password editor…");
-                            await Task.Delay(50, cancellation); continue;
-                        }
-                    }
+                        DateTimeOffset.UtcNow - stageSince >= TimeSpan.FromSeconds(3))
+                        throw new LoginSafetyException("The password editor did not open. No password was entered; inspect POL before retrying.");
+                    // Once editor opening is requested, reread readiness only.
+                    // A stale Connect frame cannot justify more input into the software keyboard.
                     // FFXI can expose a menu before its first Enter is accepted.
                     // Retry only freshly recognized reversible menu transitions,
                     // never credentials or the final character confirmation.
@@ -805,7 +777,9 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                                 Click(frame, "Back"); returnedToMemberList = true; visits[stage]--; break;
                             }
                             identityVerified = true;
+                            if (!polEnterPath.Started) polEnterPath.Begin(memberSelectedByExactId);
                             window.Key(0x0d);
+                            LogPolPathEvent("LogInEnter", stage);
                             cachedLogInAt = DateTimeOffset.UtcNow;
                             break;
                         case LoginCheckpoint.Connect:
@@ -825,10 +799,13 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                                 cancellation.ThrowIfCancellationRequested();
                                 submitted = true;
                                 Click(frame, "Connect");
+                                LogPolPathEvent("SubmitCredentialsClick", stage);
                             }
                             else
                             {
-                                window.Key(0x0d); editorOpened = true;
+                                var field = LoginCheckpoints.PasswordField(frame) ?? throw new LoginSafetyException("The Square Enix password field could not be located safely.");
+                                window.Click(field.X, field.Y, frame.Width, frame.Height); editorOpened = true;
+                                LogPolPathEvent("OpenPasswordFieldClick", stage);
                             }
                             break;
                         case LoginCheckpoint.PasswordEditor:
@@ -841,9 +818,11 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             var credentials = vault.Read(account.Id) ?? throw new LoginSafetyException("Save the Square Enix password before automatic login.");
                             if (string.IsNullOrEmpty(credentials.SquareEnixPassword)) throw new LoginSafetyException("The saved Square Enix password is empty.");
                             var entryClock = Stopwatch.StartNew();
+                            LogPolPathEvent("PasswordEntryStarted", stage);
                             window.Password(credentials.SquareEnixPassword, cancellation);
                             cancellation.ThrowIfCancellationRequested();
                             window.Key(0x0d); passwordEntered = true;
+                            LogPolPathEvent("PasswordEditorCommitEnter", stage);
                             passwordMs = entryClock.ElapsedMilliseconds; break;
                         case LoginCheckpoint.Home: Click(frame, frame.UniqueLine("FINAL FANTASY XI") != null ? "FINAL FANTASY XI" : "FINAL FANTASY"); break;
                         case LoginCheckpoint.Play: window.ConfirmGameSelection(); break;
