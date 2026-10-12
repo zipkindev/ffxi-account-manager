@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.6
+
+- Added a saved Show maintenance on cards option; the main Server maintenance section remains visible.
+- Card notices show applicable maintenance within 12 hours, preferring a matching-world notice over a global notice.
+- Removed empty world-status rows and hid card panels when no applicable alert is due. Scheduling and reconnect holds remain independent of display preferences.
+
+
 ## 1.0.5
 
 - Made per-character maintenance panel backgrounds 50% transparent while preserving full-opacity text.

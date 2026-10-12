@@ -611,3 +611,14 @@ try
 }
 finally { if (Directory.Exists(artworkDirectory)) Directory.Delete(artworkDirectory, true); }
 Console.WriteLine($"{passed} final checks passed.");
+
+var alertNow = DateTimeOffset.UtcNow;
+var globalCardNotice = new MaintenanceWindow("fixture", "Global", alertNow.AddHours(1), alertNow.AddHours(2));
+var worldCardNotice = globalCardNotice with { World = "Asura", StartUtc = alertNow.AddHours(12), EndUtc = alertNow.AddHours(13) };
+Check(MaintenanceSchedule.CardAlert([globalCardNotice, worldCardNotice], "Asura", alertNow) == worldCardNotice, "matching-world card alert takes priority at the inclusive 12-hour boundary");
+Check(MaintenanceSchedule.CardAlert([globalCardNotice, worldCardNotice], "Odin", alertNow) == globalCardNotice, "other-world maintenance does not replace a global card alert");
+Check(MaintenanceSchedule.CardAlert([worldCardNotice], null, alertNow) == null, "unknown world cannot show a specific-world card alert");
+Check(MaintenanceSchedule.CardAlert([worldCardNotice with { StartUtc = alertNow.AddHours(12).AddSeconds(1) }], "Asura", alertNow) == null, "card alert stays hidden beyond 12 hours");
+Check(MaintenanceSchedule.CardAlert([globalCardNotice with { StartUtc = alertNow.AddHours(-1), EndUtc = alertNow.AddHours(1) }], "Asura", alertNow) != null, "active maintenance remains visible on cards");
+Check(MaintenanceSchedule.CardAlert([globalCardNotice with { StartUtc = alertNow.AddHours(-2), EndUtc = alertNow }], "Asura", alertNow) == null, "finished card alerts disappear");
+Console.WriteLine($"{passed} final checks passed.");

@@ -13,6 +13,11 @@ public static class MaintenanceSchedule
     public static IReadOnlyList<MaintenanceWindow> UpcomingForCharacter(IEnumerable<MaintenanceWindow> windows, string? world, DateTimeOffset now) =>
         windows.Where(w => w.EndUtc > now && (w.World == null || (!string.IsNullOrWhiteSpace(world) && w.World.Equals(world, StringComparison.OrdinalIgnoreCase))))
             .OrderBy(w => w.StartUtc).ThenBy(w => w.EndUtc).ToArray();
+    public static MaintenanceWindow? CardAlert(IEnumerable<MaintenanceWindow> windows, string? world, DateTimeOffset now)
+    {
+        var upcoming = UpcomingForCharacter(windows, world, now).Where(w => w.StartUtc <= now.AddHours(12)).ToArray();
+        return upcoming.FirstOrDefault(w => w.World != null) ?? upcoming.FirstOrDefault(w => w.World == null);
+    }
     public static MaintenanceWindow? ShutdownDue(AccountConfiguration account, MaintenanceSnapshot snapshot, DateTimeOffset now)
     {
         if (!account.ScheduleMaintenance || !account.MaintainConnection || string.IsNullOrWhiteSpace(account.World) ||

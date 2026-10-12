@@ -88,6 +88,8 @@ public sealed partial class MainWindow : Window
         ThemePicker.SelectedItem = ThemeCatalog.Resolve(configuration.Theme);
         ThemePicker.IsEnabled = configurationReadable;
         LandscapeCardsToggle.IsChecked = configuration.LandscapeCards;
+        ShowCardMaintenanceToggle.IsChecked = configuration.ShowCardMaintenance;
+        ShowCardMaintenanceToggle.IsEnabled = configurationReadable;
         ApplyTheme(ThemeCatalog.Resolve(configuration.Theme));
         updatingTheme = false;
         WindowerPath.Text = configuration.WindowerPath;
@@ -249,6 +251,23 @@ public sealed partial class MainWindow : Window
             configuration = previous; updatingTheme = true;
             LandscapeCardsToggle.IsChecked = previous.LandscapeCards; updatingTheme = false;
             Log("Could not save card appearance: " + ex.Message);
+        }
+    }
+    private void CardMaintenanceChanged(object? sender, RoutedEventArgs args)
+    {
+        if (updatingTheme || !configurationReadable) return;
+        var previous = configuration;
+        try
+        {
+            var next = configuration with { ShowCardMaintenance = ShowCardMaintenanceToggle.IsChecked == true };
+            store.Save(next); configuration = next; RefreshCharacterMaintenance();
+        }
+        catch (Exception ex)
+        {
+            updatingTheme = true;
+            ShowCardMaintenanceToggle.IsChecked = previous.ShowCardMaintenance;
+            updatingTheme = false;
+            Log("Could not save maintenance display preference: " + ex.Message);
         }
     }
     private void ShuffleArtwork(object? sender, RoutedEventArgs args)
@@ -1092,17 +1111,15 @@ public sealed partial class MainWindow : Window
         foreach (var account in configuration.ConfiguredAccounts)
         {
             if (!characterMaintenance.TryGetValue(account.Id, out var display)) continue;
-            var relevant = MaintenanceSchedule.UpcomingForCharacter(snapshot.Windows, account.World, now);
-            var next = relevant.FirstOrDefault();
-            var global = relevant.FirstOrDefault(w => w.World == null);
-            var world = relevant.FirstOrDefault(w => w.World != null);
-            var missing = snapshot.ReviewRequired?.Count > 0 ? "Unconfirmed — notice requires review" : fresh ? "None announced" : "Not confirmed — waiting for a fresh notice check";
-            var rows = new List<string> { "Global: " + (global == null ? missing : Describe(global)),
-                string.IsNullOrWhiteSpace(account.World) ? "World: pending detection" : account.World + ": " + (world == null ? missing : Describe(world)) };
-            if (next != null) rows.Insert(0, "Next: " + (next.World ?? "Global") + " · times shown in your local zone");
-            ToolTip.SetTip(display, relevant.Count == 0 ? null : string.Join("\n", relevant.Select(w => "Official notice: " + w.Title + "\n" + w.Source)));
-            if (!fresh && snapshot.CheckedUtc is { } lastCheck) rows.Add($"Cached schedule · last checked {lastCheck.ToLocalTime():g}; refresh required");
-            if (snapshot.ReviewRequired?.Count > 0) rows.Add("Relevant notice(s) need review; schedule may be incomplete: " + string.Join("; ", snapshot.ReviewRequired));
+            var alertWindow = MaintenanceSchedule.CardAlert(snapshot.Windows, account.World, now);
+            var rows = new List<string>();
+            if (alertWindow != null)
+            {
+                rows.Add((alertWindow.World ?? "Global") + ": " + Describe(alertWindow));
+                if (!fresh) rows.Add("Cached schedule · refresh required");
+                if (snapshot.ReviewRequired?.Count > 0) rows.Add("Notice(s) need review; schedule may be incomplete.");
+            }
+            ToolTip.SetTip(display, alertWindow == null ? null : "Official notice: " + alertWindow.Title + "\n" + alertWindow.Source);
             foreach (var alert in GameAlerts(account))
             {
                 var hold = InGameMaintenance.Hold([alert], snapshot, now);
@@ -1111,7 +1128,19 @@ public sealed partial class MainWindow : Window
                 rows.Add(hold == null ? "Posted window finished; reconnect hold released" : hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
             }
             display.Text = string.Join("\n", rows);
+            if (display.Parent is Border panel) panel.IsVisible = configuration.ShowCardMaintenance && rows.Count > 0;
         }
+        RefreshMainMaintenance();
+    }
+    private void RefreshMainMaintenance()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var rows = new List<string> { maintenance.Status };
+        rows.AddRange(maintenance.Snapshot.Windows.Where(w => w.EndUtc > now)
+            .Select(w => $"{(w.World ?? "Global")}: {MaintenanceTimeDisplay.Range(w.StartUtc, w.EndUtc)}"));
+        foreach (var alert in configuration.ConfiguredAccounts.SelectMany(GameAlerts).DistinctBy(a => a.World + "\n" + a.Message))
+            rows.Add($"In-game alert · {alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
+        MaintenanceStatus.Text = string.Join("\n", rows);
     }
     private async Task CheckRecovery()
     {
@@ -1123,7 +1152,7 @@ public sealed partial class MainWindow : Window
             maintenance.Worlds = configuration.ConfiguredAccounts.Select(a => a.World).Distinct().ToArray();
             await maintenance.RefreshAsync(false, shutdown.Token);
             RefreshCharacterMaintenance();
-            MaintenanceStatus.Text = maintenance.Status + "\n" + string.Join("\n", maintenance.Snapshot.Windows.Where(w => w.EndUtc > DateTimeOffset.UtcNow).Select(w => $"{(w.World ?? "Global")}: {MaintenanceTimeDisplay.Range(w.StartUtc, w.EndUtc)}"));
+            RefreshMainMaintenance();
             foreach (var (id, process) in sessions.ToArray())
             {
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);

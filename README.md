@@ -33,7 +33,7 @@ Select cards, then expand **Bulk actions** to apply settings or request graceful
 - Discover and attach existing character sessions using process ownership and companion-addon character/world reports.
 - Complete POL and FFXI login with learned action paths, exact-character verification and guarded input. Keep keyboard and mouse idle during foreground login automation.
 - Gracefully shut down individual or grouped sessions, cancel pending shutdowns, and clean up disconnected POL processes. Explicit Force close is available for attached hung sessions.
-- Track official global/world maintenance notices in your local time zone, schedule downtime and pause reconnection attempts during maintenance. The companion also observes in-game emergency warnings.
+- Track official global/world maintenance notices in your local time zone, schedule downtime and pause reconnection attempts during maintenance. The companion also observes in-game emergency warnings. **Show maintenance on cards** hides or shows the per-character panels independently of the main Server maintenance section. Card panels show applicable windows within 12 hours, preferring matching-world notices; the main section retains the full schedule and in-game alerts.
 - Choose saved UI/artwork themes, landscape account cards, and drag-to-reorder account order.
 - Show shared Vana’diel time, weekday element and moon phase; display per-character zone weather with single/double element icons.
 

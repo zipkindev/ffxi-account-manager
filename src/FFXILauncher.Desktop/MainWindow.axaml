@@ -32,6 +32,7 @@
           <CheckBox x:Name="LandscapeCardsToggle" Content="Landscape cards" IsCheckedChanged="LandscapeCardsChanged" />
           <Button x:Name="ShuffleArtworkButton" Content="Shuffle artwork" Click="ShuffleArtwork" Padding="10,5" ToolTip.Tip="Choose and save new landscapes for character cards" />
         </StackPanel>
+        <CheckBox x:Name="ShowCardMaintenanceToggle" Content="Show maintenance on cards" HorizontalAlignment="Right" IsCheckedChanged="CardMaintenanceChanged" ToolTip.Tip="Show applicable alerts within 12 hours. The main maintenance section remains visible." />
       </StackPanel>
     </Grid>
     <ScrollViewer x:Name="AccountScroll" Grid.Row="1">
@@ -85,7 +86,7 @@
         </Expander>
         <TextBlock x:Name="EmptyState" Text="Add your first account, choose its Windower profile, and select a character." Classes="muted" TextWrapping="Wrap" Margin="0,16" />
         <StackPanel x:Name="AccountList" Spacing="12" />
-        <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
+        <Border x:Name="MainMaintenancePanel" Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Server maintenance" FontSize="18" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Refresh notices" Click="RefreshMaintenance" /></Grid>
           <TextBlock x:Name="MaintenanceStatus" Text="Official maintenance notices have not been checked." Classes="muted" TextWrapping="Wrap" />
           <TextBlock Text="Upcoming windows pause reconnects. Automatic shutdown and relogin await Windows login validation." Classes="muted" TextWrapping="Wrap" />
