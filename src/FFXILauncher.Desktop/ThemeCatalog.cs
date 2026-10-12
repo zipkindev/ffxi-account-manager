@@ -27,7 +27,7 @@ public static class ThemeCatalog
         new("amano-map", "FFXI · Amano · World map", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#DEBE76", Artwork: "Amano0.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
         new("amano-zilart", "FFXI · Amano · Zilart", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#A1CDE8", Artwork: "Amano1.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
         new("arita-crystal", "FFXI · Arita · Crystal illustration", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#9FD9D4", Artwork: "Arita0.jpg", Portrait: false),
-        new("ffxi-original", "FFXI · Original FFXI", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#8CD4E3", Artwork: "Illustration0.jpg", Portrait: true),
+        new("ffxi-original", "FFXI · Original FFXI", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#8CD4E3", Artwork: "Illustration0.jpg", Portrait: true, SideArtwork: "Anniversary2.jpg", SideFocus: .40, Credit: "Artwork: JUN SUEMI / SQUARE ENIX · © SQUARE ENIX"),
         new("abyssea", "FFXI · Abyssea", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#BDA5D9", Artwork: "Illustration6.jpg", Portrait: true, SideArtwork: "Maw.jpg", Credit: "Artwork: JUN SUEMI / SQUARE ENIX · © SQUARE ENIX"),
         new("amano-autumn", "FFXI · Amano · Autumn", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#D5C59D", Artwork: "Amano10.jpg", Portrait: true, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX", SideArtwork: "Amano12.jpg", BackgroundVerticalFocus: 0)
     };

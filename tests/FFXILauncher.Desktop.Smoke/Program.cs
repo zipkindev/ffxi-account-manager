@@ -433,6 +433,7 @@ Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
 if (ThemeCatalog.All.Count != 16 || ThemeCatalog.All.Count(t => t.Artwork != null) != 12) throw new Exception("Theme picker must contain four dark UI and twelve artwork themes.");
 if (ThemeCatalog.All.Any(t => t.Id == "maw") || ThemeCatalog.Resolve("maw") is not { Id: "abyssea", SideArtwork: "Maw.jpg", Artwork: "Illustration6.jpg" }) throw new Exception("Existing Cavernous Maw selections must resolve to the merged Abyssea theme.");
 if (ThemeCatalog.Resolve("rakaznar") is not { Artwork: "Amano3.jpg", SideArtwork: "Promyvion.jpg" }) throw new Exception("Promyvion must retain its zone illustration on the left and use the chosen primary background.");
+if (ThemeCatalog.Resolve("ffxi-original") is not { Artwork: "Illustration0.jpg", SideArtwork: "Anniversary2.jpg", SideFocus: .40 }) throw new Exception("Original FFXI must preserve the approved paired artwork and character crop.");
 var themePicker = configured.FindControl<ComboBox>("ThemePicker")!;
 foreach (var theme in ThemeCatalog.All)
 {

@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.12
+
+- Original FFXI now pairs the approved anniversary character illustration on the left with its original artwork on the right.
+- The left crop focuses on the character’s face and upper body while preserving image proportions.
+
 ## 1.0.11
 
 - Promyvion now uses the selected Amano illustration as its primary right background, retaining the original zone artwork on the left.

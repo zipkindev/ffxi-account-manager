@@ -20,6 +20,7 @@ URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/seaso
 | Amano3.jpg | 1/vol/1/3.jpg |
 | Amano5.jpg | 1/vol/1/5.jpg |
 | Arita0.jpg | 8/vol/3/0.jpg |
+| Anniversary2.jpg | 6/vol/1/2.jpg |
 | Illustration0.jpg | 2/vol/1/0.jpg |
 | Illustration6.jpg | 2/vol/1/6.jpg |
 
@@ -27,6 +28,7 @@ URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/seaso
 Amano5: Treasures of Aht Urhgan Artwork, ©2006 YOSHITAKA AMANO.
 Other Amano pieces: Yoshitaka Amano; refer to the individual gallery credit.
 Illustration6: Abyssea Trilogy, illustrator Jun Suemi.
+Anniversary2: 10th anniversary illustration (2012), illustrator Jun Suemi.
 Arita0: illustrator Mitsuhiro Arita.
 
 Art remains owned by its respective copyright holders. Theme and card rendering
