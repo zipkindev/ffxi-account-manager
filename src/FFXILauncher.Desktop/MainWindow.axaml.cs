@@ -54,6 +54,7 @@ public sealed partial class MainWindow : Window
     private bool updatingSelection;
     private bool updatingTheme;
     private Bitmap? themeArtwork;
+    private Bitmap? sideArtwork;
     private readonly Dictionary<string, Bitmap> landscapeArtwork = [];
 
     public MainWindow() : this(null) { }
@@ -108,7 +109,7 @@ public sealed partial class MainWindow : Window
         timer.Tick += async (_, _) => { AttachVerifiedSessions(); CollectCharacterWorlds(); RefreshSessions(); await CheckRecovery(); };
         timer.Start();
         SizeChanged += (_, _) => UpdateArtworkLayout();
-        Closed += (_, _) => { shutdown.Cancel(); timer.Stop(); calibrationControl?.Dispose(); (autoLogin as IDisposable)?.Dispose(); themeArtwork?.Dispose(); foreach (var bitmap in landscapeArtwork.Values) bitmap.Dispose(); };
+        Closed += (_, _) => { shutdown.Cancel(); timer.Stop(); calibrationControl?.Dispose(); (autoLogin as IDisposable)?.Dispose(); themeArtwork?.Dispose(); sideArtwork?.Dispose(); foreach (var bitmap in landscapeArtwork.Values) bitmap.Dispose(); };
     }
     private async void ShowReleaseNotes(object? sender, RoutedEventArgs args) =>
         await ShowDocument("FFXI Account Manager · v" + AppRelease.Version, AppRelease.Notes);
@@ -193,11 +194,19 @@ public sealed partial class MainWindow : Window
             using var stream = AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Themes/" + theme.Artwork));
             nextArtwork = new Bitmap(stream);
         }
+        Bitmap? nextSideArtwork = null;
+        if (theme.SideArtwork != null)
+        {
+            using var stream = AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Themes/" + theme.SideArtwork));
+            nextSideArtwork = new Bitmap(stream);
+        }
         ThemeCatalog.Apply(theme);
         BackgroundArtwork.Source = nextArtwork;
         PortraitArtwork.Source = nextArtwork;
         BackgroundArtwork.Opacity = .85;
         themeArtwork?.Dispose();
+        sideArtwork?.Dispose();
+        sideArtwork = nextSideArtwork;
         themeArtwork = nextArtwork;
         ArtworkShade.IsVisible = nextArtwork != null;
         ArtworkCredit.IsVisible = nextArtwork != null;
@@ -213,17 +222,17 @@ public sealed partial class MainWindow : Window
         MainContentGrid.Margin = new Thickness(portrait ? 256 : 32, 32, 32, 32);
         if (themeArtwork != null && Bounds.Height > 0)
         {
-            PortraitArtwork.Source = CropArtwork(themeArtwork, 240 / Bounds.Height, theme.SideFocus);
-            BackgroundArtwork.Source = CropArtwork(themeArtwork, Math.Max(1, Bounds.Width - (portrait ? 240 : 0)) / Bounds.Height, theme.BackgroundFocus);
+            PortraitArtwork.Source = CropArtwork(sideArtwork ?? themeArtwork, 240 / Bounds.Height, theme.SideFocus);
+            BackgroundArtwork.Source = CropArtwork(themeArtwork, Math.Max(1, Bounds.Width - (portrait ? 240 : 0)) / Bounds.Height, theme.BackgroundFocus, theme.BackgroundVerticalFocus);
         }
     }
-    private static CroppedBitmap CropArtwork(Bitmap source, double ratio, double focus)
+    private static CroppedBitmap CropArtwork(Bitmap source, double ratio, double focus, double verticalFocus = .5)
     {
         var size = source.PixelSize;
         var width = Math.Min(size.Width, Math.Max(1, (int)Math.Round(size.Height * ratio)));
         var height = Math.Min(size.Height, Math.Max(1, (int)Math.Round(size.Width / ratio)));
         var x = (int)Math.Clamp(size.Width * focus - width / 2d, 0, size.Width - width);
-        var y = (size.Height - height) / 2;
+        var y = (int)Math.Clamp(size.Height * verticalFocus - height / 2d, 0, size.Height - height);
         return new CroppedBitmap { Source = source, SourceRect = new PixelRect(x, y, width, height) };
     }
     private IBrush CharacterCardBrush()

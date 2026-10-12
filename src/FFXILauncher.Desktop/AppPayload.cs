@@ -87,6 +87,12 @@ internal static class AppPayload
             using var artworkStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Themes/" + theme.Artwork));
             using var artwork = new Avalonia.Media.Imaging.Bitmap(artworkStream);
             if (artwork.PixelSize.Width <= 0 || artwork.PixelSize.Height <= 0) throw new IOException("Invalid bundled artwork.");
+            if (theme.SideArtwork != null)
+            {
+                using var sideStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Themes/" + theme.SideArtwork));
+                using var side = new Avalonia.Media.Imaging.Bitmap(sideStream);
+                if (side.PixelSize.Width <= 0 || side.PixelSize.Height <= 0) throw new IOException("Invalid bundled side artwork.");
+            }
             artworkThemesVerified++;
         }
         var installSource = InstallSource();

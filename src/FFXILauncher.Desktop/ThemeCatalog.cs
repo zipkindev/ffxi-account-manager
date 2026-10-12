@@ -5,7 +5,7 @@ using Avalonia.Styling;
 
 namespace FFXILauncher.Desktop;
 
-public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null, double SideFocus = .5, double BackgroundFocus = .5)
+public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null, double SideFocus = .5, double BackgroundFocus = .5, string? SideArtwork = null, double BackgroundVerticalFocus = .5)
 {
     public override string ToString() => Name;
 }
@@ -29,7 +29,8 @@ public static class ThemeCatalog
         new("amano-zilart", "FFXI · Amano · Zilart", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#A1CDE8", Artwork: "Amano1.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
         new("arita-crystal", "FFXI · Arita · Crystal illustration", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#9FD9D4", Artwork: "Arita0.jpg", Portrait: false),
         new("ffxi-original", "FFXI · Original FFXI", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#8CD4E3", Artwork: "Illustration0.jpg", Portrait: true),
-        new("abyssea", "FFXI · Abyssea", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#BDA5D9", Artwork: "Illustration6.jpg", Portrait: true)
+        new("abyssea", "FFXI · Abyssea", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#BDA5D9", Artwork: "Illustration6.jpg", Portrait: true),
+        new("amano-autumn", "FFXI · Amano · Autumn", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#D5C59D", Artwork: "Amano10.jpg", Portrait: true, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX", SideArtwork: "Amano12.jpg", BackgroundVerticalFocus: 0)
     };
 
     public static IReadOnlyList<string> Landscapes { get; } = new[] { "Ulbuka.jpg", "Adoulin.jpg", "EasternAdoulin.jpg", "Promyvion.jpg" };

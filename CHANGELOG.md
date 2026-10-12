@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.10
+
+- Added FFXI · Amano · Autumn, pairing the character illustration on the left with the autumn artwork across the right.
+- Artwork themes now support independent side and background images with aspect-preserving crops.
+
 ## 1.0.9
 
 - Widened the maintenance advance-notice hour editor so its full value remains readable alongside the spinner buttons, including the maximum 168 hours.

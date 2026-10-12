@@ -1,10 +1,10 @@
-# Theme previews — v1.0.4
+# Theme previews — v1.0.10
 
-Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and matching right background.
+Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and right background; Amano · Autumn pairs two distinct images.
 
 ## Artwork themes
 
-![All twelve artwork themes](artwork-sheet.png)
+![All thirteen artwork themes](artwork-sheet.png)
 
 [Landscape cards enabled: prominent artwork and distinct images](abyssea-landscape-cards.png). Shuffle uses the entire landscape pool before repeating.
 
@@ -31,6 +31,7 @@ Actual application renders with example accounts. No real credentials or game se
 | FFXI · Amano · Zilart | [Full size](amano-zilart.png) |
 | FFXI · Arita · Crystal illustration | [Full size](arita-crystal.png) |
 | FFXI · Original FFXI | [Full size](ffxi-original.png) |
+| FFXI · Amano · Autumn | [Full size](amano-autumn.png) |
 | FFXI · Abyssea | [Full size](abyssea.png) |
 
 [Narrow-window Abyssea view](abyssea-narrow.png): the side panel hides to preserve room for controls.
