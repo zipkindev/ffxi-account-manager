@@ -2,7 +2,10 @@
   <Grid>
     <Grid x:Name="ArtworkPanels" ColumnDefinitions="0,*" IsHitTestVisible="False">
       <Border x:Name="PortraitFrame" Grid.Column="0" ClipToBounds="True" IsVisible="False">
-        <Image x:Name="PortraitArtwork" Stretch="UniformToFill" />
+        <Grid>
+          <Image x:Name="PortraitArtwork" Stretch="UniformToFill" />
+          <Border x:Name="PortraitShade" Background="#8C101720" IsVisible="False" />
+        </Grid>
       </Border>
       <Grid Grid.Column="1" ClipToBounds="True">
         <Image x:Name="BackgroundArtwork" Stretch="UniformToFill" />

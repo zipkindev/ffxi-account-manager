@@ -1,6 +1,6 @@
 # Artwork sources
 
-Original unmodified artwork from Square Enix's WE ARE VANA'DIEL gallery.
+Original unmodified artwork from Square Enix's WE ARE VANA'DIEL gallery, plus the user-selected full map and Zilart images linked below.
 https://we-are-vanadiel.finalfantasyxi.com/gallery/
 
 URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/season/
@@ -23,6 +23,9 @@ URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/seaso
 | Anniversary2.jpg | 6/vol/1/2.jpg |
 | Illustration0.jpg | 2/vol/1/0.jpg |
 | Illustration6.jpg | 2/vol/1/6.jpg |
+
+WorldMapFull.jpg: https://www.espritduo.com/Amano/FF11/Vana'diel.jpg
+ZilartFull.jpg: https://www.espritduo.com/Amano/FF11/Rise%20of%20the%20Zilart%20Cover%20Art.jpg
 
 © SQUARE ENIX CO., LTD. All Rights Reserved.
 Amano5: Treasures of Aht Urhgan Artwork, ©2006 YOSHITAKA AMANO.

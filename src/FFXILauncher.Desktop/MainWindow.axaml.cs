@@ -204,6 +204,8 @@ public sealed partial class MainWindow : Window
         BackgroundArtwork.Source = nextArtwork;
         PortraitArtwork.Source = nextArtwork;
         BackgroundArtwork.Opacity = .85;
+        PortraitArtwork.Opacity = theme.ContinuousArtwork ? .85 : 1;
+        PortraitShade.IsVisible = theme.ContinuousArtwork;
         themeArtwork?.Dispose();
         sideArtwork?.Dispose();
         sideArtwork = nextSideArtwork;
@@ -222,9 +224,28 @@ public sealed partial class MainWindow : Window
         MainContentGrid.Margin = new Thickness(portrait ? 256 : 32, 32, 32, 32);
         if (themeArtwork != null && Bounds.Height > 0)
         {
-            PortraitArtwork.Source = CropArtwork(sideArtwork ?? themeArtwork, 240 / Bounds.Height, theme.SideFocus);
-            BackgroundArtwork.Source = CropArtwork(themeArtwork, Math.Max(1, Bounds.Width - (portrait ? 240 : 0)) / Bounds.Height, theme.BackgroundFocus, theme.BackgroundVerticalFocus);
+            if (theme.ContinuousArtwork)
+                SetContinuousArtwork(themeArtwork, portrait ? 240 : 0, theme.BackgroundFocus, theme.BackgroundVerticalFocus);
+            else
+            {
+                PortraitArtwork.Source = CropArtwork(sideArtwork ?? themeArtwork, 240 / Bounds.Height, theme.SideFocus);
+                BackgroundArtwork.Source = CropArtwork(themeArtwork, Math.Max(1, Bounds.Width - (portrait ? 240 : 0)) / Bounds.Height, theme.BackgroundFocus, theme.BackgroundVerticalFocus);
+            }
         }
+    }
+    private void SetContinuousArtwork(Bitmap source, double sideWidth, double focus, double verticalFocus)
+    {
+        var size = source.PixelSize;
+        var ratio = Bounds.Width / Bounds.Height;
+        var width = Math.Min(size.Width, Math.Max(1, (int)Math.Round(size.Height * ratio)));
+        var height = Math.Min(size.Height, Math.Max(1, (int)Math.Round(size.Width / ratio)));
+        var split = (int)Math.Round(width * sideWidth / Bounds.Width);
+        // One viewport and shared scale. Center the subject in the main area,
+        // then divide the source into adjacent rectangles without repeating pixels.
+        var x = (int)Math.Clamp(size.Width * focus - (width + split) / 2d, 0, size.Width - width);
+        var y = (int)Math.Clamp(size.Height * verticalFocus - height / 2d, 0, size.Height - height);
+        PortraitArtwork.Source = split == 0 ? null : new CroppedBitmap { Source = source, SourceRect = new PixelRect(x, y, split, height) };
+        BackgroundArtwork.Source = new CroppedBitmap { Source = source, SourceRect = new PixelRect(x + split, y, width - split, height) };
     }
     private static CroppedBitmap CropArtwork(Bitmap source, double ratio, double focus, double verticalFocus = .5)
     {

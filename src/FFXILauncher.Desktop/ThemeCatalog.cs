@@ -5,7 +5,7 @@ using Avalonia.Styling;
 
 namespace FFXILauncher.Desktop;
 
-public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null, double SideFocus = .5, double BackgroundFocus = .5, string? SideArtwork = null, double BackgroundVerticalFocus = .5)
+public sealed record AppTheme(string Id, string Name, string Background, string Surface, string Inset, string Text, string Muted, string Accent, bool Light = false, string? Artwork = null, bool Portrait = false, string? Credit = null, double SideFocus = .5, double BackgroundFocus = .5, string? SideArtwork = null, double BackgroundVerticalFocus = .5, bool ContinuousArtwork = false)
 {
     public override string ToString() => Name;
 }
@@ -23,9 +23,9 @@ public static class ThemeCatalog
         new("eastern-adoulin", "FFXI · Eastern Adoulin", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#97C9D6", Artwork: "EasternAdoulin.jpg", Portrait: false),
         new("ulbuka", "FFXI · East Ulbuka", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#98CAB5", Artwork: "Ulbuka.jpg", Portrait: false),
         new("amano-aht", "FFXI · Treasures of Aht Urhgan", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#D5C59D", Artwork: "Amano5.jpg", Portrait: true, Credit: "©2006 YOSHITAKA AMANO · © SQUARE ENIX"),
-        new("amano-blue", "FFXI · Amano · Blue illustration", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#95D8E2", Artwork: "Amano13.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
-        new("amano-map", "FFXI · Amano · World map", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#DEBE76", Artwork: "Amano0.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
-        new("amano-zilart", "FFXI · Amano · Zilart", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#A1CDE8", Artwork: "Amano1.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX"),
+        new("amano-blue", "FFXI · Amano · Blue illustration", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#95D8E2", Artwork: "Amano13.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX", BackgroundFocus: .62, ContinuousArtwork: true),
+        new("amano-map", "FFXI · Amano · World map", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#DEBE76", Artwork: "WorldMapFull.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX", BackgroundFocus: .52, ContinuousArtwork: true),
+        new("amano-zilart", "FFXI · Amano · Zilart", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#A1CDE8", Artwork: "ZilartFull.jpg", Portrait: false, Credit: "Artwork: YOSHITAKA AMANO · © SQUARE ENIX", BackgroundFocus: .52, ContinuousArtwork: true),
         new("arita-crystal", "FFXI · Arita · Crystal illustration", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#9FD9D4", Artwork: "Arita0.jpg", Portrait: false),
         new("ffxi-original", "FFXI · Original FFXI", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#8CD4E3", Artwork: "Illustration0.jpg", Portrait: true, SideArtwork: "Anniversary2.jpg", SideFocus: .40, Credit: "Artwork: JUN SUEMI / SQUARE ENIX · © SQUARE ENIX"),
         new("abyssea", "FFXI · Abyssea", "#101820", "#E51B2937", "#F0111C27", "#E7EDF2", "#C3CFD8", "#BDA5D9", Artwork: "Illustration6.jpg", Portrait: true, SideArtwork: "Maw.jpg", Credit: "Artwork: JUN SUEMI / SQUARE ENIX · © SQUARE ENIX"),

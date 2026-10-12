@@ -1,6 +1,8 @@
-# Theme previews — v1.0.12
+# Theme previews — v1.0.13
 
-Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and right background; Amano · Autumn, Abyssea, Promyvion and Original FFXI pair two distinct images.
+Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and right background; Amano · Autumn, Abyssea, Promyvion, and Original FFXI pair two distinct images.
+
+World Map, Zilart and Blue Illustration use a continuous panoramic background: the left panel reveals the adjoining artwork rather than repeating it.
 
 ## Artwork themes
 

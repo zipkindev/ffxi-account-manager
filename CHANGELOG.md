@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.13
+
+- World Map and Zilart now use the selected full artwork, centered on the female figure and chocobo rider in the main area.
+- World Map, Zilart and Blue Illustration now form one continuous image across the left panel and right background, with adjoining crops and matching shading through resizing.
+
 ## 1.0.12
 
 - Original FFXI now pairs the approved anniversary character illustration on the left with its original artwork on the right.

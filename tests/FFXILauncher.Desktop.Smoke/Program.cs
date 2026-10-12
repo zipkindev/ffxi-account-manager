@@ -440,6 +440,13 @@ foreach (var theme in ThemeCatalog.All)
     themePicker.SelectedItem = theme;
     Dispatcher.UIThread.RunJobs();
     if (theme.Artwork != null && (!configured.FindControl<Border>("PortraitFrame")!.IsVisible || configured.FindControl<Image>("PortraitArtwork")!.Source is not CroppedBitmap || configured.FindControl<Image>("BackgroundArtwork")!.Source is not CroppedBitmap)) throw new Exception("Every artwork theme needs aspect-preserving expanded crops.");
+    if (theme.ContinuousArtwork)
+    {
+        var leftCrop = (CroppedBitmap)configured.FindControl<Image>("PortraitArtwork")!.Source!;
+        var rightCrop = (CroppedBitmap)configured.FindControl<Image>("BackgroundArtwork")!.Source!;
+        if (!ReferenceEquals(leftCrop.Source, rightCrop.Source) || leftCrop.SourceRect.Right != rightCrop.SourceRect.X || leftCrop.SourceRect.Y != rightCrop.SourceRect.Y || leftCrop.SourceRect.Height != rightCrop.SourceRect.Height) throw new Exception("Continuous artwork panels must share one image and adjoining source rectangles.");
+        if (configured.FindControl<Image>("PortraitArtwork")!.Opacity != configured.FindControl<Image>("BackgroundArtwork")!.Opacity || !configured.FindControl<Border>("PortraitShade")!.IsVisible) throw new Exception("Continuous artwork must use matching brightness across the seam.");
+    }
     if (theme.SideArtwork != null)
     {
         var sideCrop = (CroppedBitmap)configured.FindControl<Image>("PortraitArtwork")!.Source!;
@@ -449,6 +456,20 @@ foreach (var theme in ThemeCatalog.All)
     if (new ConfigurationStore(directory).Load().Theme != theme.Id) throw new Exception("Selected theme did not persist.");
     if ((configured.FindControl<Image>("BackgroundArtwork")!.Source != null) != (theme.Artwork != null)) throw new Exception("Artwork theme did not load: " + theme.Id + " · " + configured.FindControl<TextBlock>("Activity")!.Text);
 }
+foreach (var id in new[] { "amano-map", "amano-zilart", "amano-blue" })
+{
+    themePicker.SelectedItem = ThemeCatalog.Resolve(id);
+    foreach (var width in new[] { 900d, 1050d, 1440d })
+    {
+        configured.Width = width;
+        Dispatcher.UIThread.RunJobs();
+        var left = configured.FindControl<Image>("PortraitArtwork")!.Source as CroppedBitmap;
+        var right = (CroppedBitmap)configured.FindControl<Image>("BackgroundArtwork")!.Source!;
+        if (width < 1050 ? left != null : left == null || left.SourceRect.Right != right.SourceRect.X) throw new Exception("Continuous artwork must remain joined through expanded and narrow layouts.");
+    }
+}
+configured.Width = 1120;
+Dispatcher.UIThread.RunJobs();
 themePicker.SelectedItem = ThemeCatalog.Resolve("abyssea");
 Dispatcher.UIThread.RunJobs();
 var savedArtwork = new ConfigurationStore(directory).Load().CharacterArtwork!;
