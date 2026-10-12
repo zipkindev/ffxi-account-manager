@@ -10,7 +10,7 @@ These screenshots show the actual application UI with example accounts and no sa
 
 ![Account dashboard with an FFXI artwork theme](docs/images/dashboard.png)
 
-Choose one of four dark UI themes or 13 artwork themes, including Abyssea. Expanded windows show a tall cropped art panel with a background behind the accounts; Amano · Autumn pairs two different images. Disable Landscape cards for more translucent account cards; enable it for prominent landscape images with minimal shading. Shuffle uses every image before repeating and avoids duplicate visible cards while enough images are available. Images keep their aspect ratio. Drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
+Choose one of four dark UI themes or 12 artwork themes, including Abyssea. Expanded windows show a tall cropped art panel with a background behind the accounts; Amano · Autumn, Abyssea and Promyvion pair two different images. Disable Landscape cards for more translucent account cards; enable it for prominent landscape images with minimal shading. Shuffle uses every image before repeating and avoids duplicate visible cards while enough images are available. Images keep their aspect ratio. Drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
 
 [See every theme at full size](docs/themes/README.md), including the narrow-window Abyssea view.
 

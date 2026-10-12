@@ -430,7 +430,9 @@ configured.FindControl<Expander>("LauncherSetup")!.IsExpanded = false;
 Dispatcher.UIThread.RunJobs();
 using (var frame = configured.CaptureRenderedFrame() ?? throw new Exception("No configured frame")) frame.Save("artifacts/dashboard-accounts.png", PngBitmapEncoderOptions.Default);
 Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
-if (ThemeCatalog.All.Count != 17 || ThemeCatalog.All.Count(t => t.Artwork != null) != 13) throw new Exception("Theme picker must contain four dark UI and thirteen artwork themes.");
+if (ThemeCatalog.All.Count != 16 || ThemeCatalog.All.Count(t => t.Artwork != null) != 12) throw new Exception("Theme picker must contain four dark UI and twelve artwork themes.");
+if (ThemeCatalog.All.Any(t => t.Id == "maw") || ThemeCatalog.Resolve("maw") is not { Id: "abyssea", SideArtwork: "Maw.jpg", Artwork: "Illustration6.jpg" }) throw new Exception("Existing Cavernous Maw selections must resolve to the merged Abyssea theme.");
+if (ThemeCatalog.Resolve("rakaznar") is not { Artwork: "Amano3.jpg", SideArtwork: "Promyvion.jpg" }) throw new Exception("Promyvion must retain its zone illustration on the left and use the chosen primary background.");
 var themePicker = configured.FindControl<ComboBox>("ThemePicker")!;
 foreach (var theme in ThemeCatalog.All)
 {
@@ -441,7 +443,7 @@ foreach (var theme in ThemeCatalog.All)
     {
         var sideCrop = (CroppedBitmap)configured.FindControl<Image>("PortraitArtwork")!.Source!;
         var backgroundCrop = (CroppedBitmap)configured.FindControl<Image>("BackgroundArtwork")!.Source!;
-        if (ReferenceEquals(sideCrop.Source, backgroundCrop.Source) || backgroundCrop.SourceRect.Y != 0) throw new Exception("Autumn must use independent side art and preserve the top of its right artwork.");
+        if (ReferenceEquals(sideCrop.Source, backgroundCrop.Source) || (theme.Id == "amano-autumn" && backgroundCrop.SourceRect.Y != 0)) throw new Exception("Paired themes must use independent images; Autumn must preserve the top of its right artwork.");
     }
     if (new ConfigurationStore(directory).Load().Theme != theme.Id) throw new Exception("Selected theme did not persist.");
     if ((configured.FindControl<Image>("BackgroundArtwork")!.Source != null) != (theme.Artwork != null)) throw new Exception("Artwork theme did not load: " + theme.Id + " · " + configured.FindControl<TextBlock>("Activity")!.Text);
@@ -484,7 +486,7 @@ configured.FindControl<Button>("CopyAddonCommandButton")!.RaiseEvent(new RoutedE
 Dispatcher.UIThread.RunJobs();
 if (configured.Clipboard!.TryGetTextAsync().GetAwaiter().GetResult() != "//lua load FFXIManager" || !configured.FindControl<TextBox>("InitialAddonCommand")!.IsReadOnly) throw new Exception("Copy action must write the displayed command and retain manual text selection.");
 configured.FindControl<Grid>("AddonCommandPanel")!.IsVisible = false;
-Console.WriteLine("PASS: all seventeen themes load, theme choice persists, unknown themes fall back, and command icon writes the displayed clipboard text.");
+Console.WriteLine("PASS: all sixteen themes load, theme choice persists, unknown themes fall back, and command icon writes the displayed clipboard text.");
 configured.Height = 2200;
 Dispatcher.UIThread.RunJobs();
 var beforeDrag = new ConfigurationStore(directory).Load().ConfiguredAccounts.ToArray();

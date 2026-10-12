@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.11
+
+- Promyvion now uses the selected Amano illustration as its primary right background, retaining the original zone artwork on the left.
+
+- Abyssea now pairs Cavernous Maw on the left with Abyssea artwork across the right.
+- Removed the standalone Cavernous Maw theme; existing selections resolve to the merged Abyssea theme.
+
 ## 1.0.10
 
 - Added FFXI · Amano · Autumn, pairing the character illustration on the left with the autumn artwork across the right.

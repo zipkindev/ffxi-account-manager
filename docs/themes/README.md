@@ -1,10 +1,10 @@
-# Theme previews — v1.0.10
+# Theme previews — v1.0.11
 
-Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and right background; Amano · Autumn pairs two distinct images.
+Actual application renders with example accounts. No real credentials or game sessions are used. Landscape cards are off to show the translucent surfaces. Expanded artwork views use aspect-preserving crops in the left panel and right background; Amano · Autumn, Abyssea and Promyvion pair two distinct images.
 
 ## Artwork themes
 
-![All thirteen artwork themes](artwork-sheet.png)
+![All twelve artwork themes](artwork-sheet.png)
 
 [Landscape cards enabled: prominent artwork and distinct images](abyssea-landscape-cards.png). Shuffle uses the entire landscape pool before repeating.
 
@@ -25,7 +25,6 @@ Actual application renders with example accounts. No real credentials or game se
 | FFXI · Eastern Adoulin | [Full size](eastern-adoulin.png) |
 | FFXI · East Ulbuka | [Full size](ulbuka.png) |
 | FFXI · Treasures of Aht Urhgan | [Full size](amano-aht.png) |
-| FFXI · Cavernous Maw | [Full size](maw.png) |
 | FFXI · Amano · Blue illustration | [Full size](amano-blue.png) |
 | FFXI · Amano · World map | [Full size](amano-map.png) |
 | FFXI · Amano · Zilart | [Full size](amano-zilart.png) |

@@ -17,6 +17,7 @@ URL root: https://we-are-vanadiel.finalfantasyxi.com/assets/images/gallery/seaso
 | Amano1.jpg | 1/vol/1/1.jpg |
 | Amano10.jpg | 1/vol/1/10.jpg |
 | Amano12.jpg | 1/vol/1/12.jpg |
+| Amano3.jpg | 1/vol/1/3.jpg |
 | Amano5.jpg | 1/vol/1/5.jpg |
 | Arita0.jpg | 8/vol/3/0.jpg |
 | Illustration0.jpg | 2/vol/1/0.jpg |

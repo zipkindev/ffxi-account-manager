@@ -39,7 +39,7 @@ jobs:
           $process = Start-Process -FilePath $exe -ArgumentList ('--package-check "' + $resultPath + '"') -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'Standalone package check failed.' }
           $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
-          if (-not $result.Standalone -or -not $result.NativeImageDecoded -or -not $result.InstallerPrepared -or -not $result.LicensesAvailable -or $result.SupportFilesVerified -lt 10 -or $result.ArtworkThemesVerified -ne 13) { throw 'Standalone package is incomplete.' }
+          if (-not $result.Standalone -or -not $result.NativeImageDecoded -or -not $result.InstallerPrepared -or -not $result.LicensesAvailable -or $result.SupportFilesVerified -lt 10 -or $result.ArtworkThemesVerified -ne 12) { throw 'Standalone package is incomplete.' }
       - uses: actions/upload-artifact@v4
         with:
           name: ffxi-account-manager-windows-x64
