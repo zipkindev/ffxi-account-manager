@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.16
+
+- The Auto login button pulses while automatic login runs and changes to Stop auto logins. Clicking it cancels all queued and active automatic logins without closing POL or game sessions.
+- Cancelled accounts stay paused for connection recovery until explicitly launched again; the button returns to normal when cancellation finishes.
+
 ## 1.0.15
 
 - After exact-ID member selection, auto login follows the known Enter → Enter path without a second account validation or Log In button lookup.

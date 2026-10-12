@@ -439,6 +439,38 @@ if (new ConfigurationStore(directory).Load().NormalizePolWindow) throw new Excep
 nativePolOption.IsChecked = true;
 Dispatcher.UIThread.RunJobs();
 if (!new ConfigurationStore(directory).Load().NormalizePolWindow) throw new Exception("POL sizing opt-in did not persist.");
+// Exercise the actual running button without launching POL or reading credentials.
+var cancellationFields = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+var loginStops = (Dictionary<Guid, CancellationTokenSource>)typeof(MainWindow).GetField("accountCancellation", cancellationFields)!.GetValue(configured)!;
+var stoppedAccounts = (HashSet<Guid>)typeof(MainWindow).GetField("intentionallyStopped", cancellationFields)!.GetValue(configured)!;
+var trackedSessions = (Dictionary<Guid, ManagedProcess>)typeof(MainWindow).GetField("sessions", cancellationFields)!.GetValue(configured)!;
+var preservedSessions = trackedSessions.ToArray();
+using (var batchStop = new CancellationTokenSource())
+using (var activeStop = new CancellationTokenSource())
+{
+    var activeAccount = new ConfigurationStore(directory).Load().ConfiguredAccounts.First().Id;
+    loginStops.Add(activeAccount, activeStop);
+    typeof(MainWindow).GetField("autoLoginBatchStop", cancellationFields)!.SetValue(configured, batchStop);
+    typeof(MainWindow).GetMethod("UpdateSelectionControls", cancellationFields)!.Invoke(configured, null);
+    var stopButton = configured.FindControl<Button>("StartEnabledButton")!;
+    if (!stopButton.IsEnabled || !stopButton.Classes.Contains("login-running") || !stopButton.Content!.ToString()!.Contains("Stop auto logins"))
+        throw new Exception("Active automatic login must keep the stop button clickable and animated.");
+    stopButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    if (!batchStop.IsCancellationRequested || !activeStop.IsCancellationRequested || !stoppedAccounts.Contains(activeAccount))
+        throw new Exception("Stop must cancel queued and active logins and suppress their recovery.");
+    foreach (var enabledAccount in new ConfigurationStore(directory).Load().ConfiguredAccounts.Where(a => a.AutoLoginEnabled))
+        if (!stoppedAccounts.Contains(enabledAccount.Id)) throw new Exception("An enabled queued account can resume after cancellation.");
+    if (stopButton.IsEnabled || stopButton.Classes.Contains("login-running") || stopButton.Content!.ToString() != "Stopping auto logins…")
+        throw new Exception("Stopping state must prevent a second start while cancellation drains.");
+    if (!preservedSessions.SequenceEqual(trackedSessions.ToArray())) throw new Exception("Cancelling login changed existing tracked sessions.");
+    loginStops.Clear();
+    typeof(MainWindow).GetField("autoLoginBatchStop", cancellationFields)!.SetValue(configured, null);
+    typeof(MainWindow).GetMethod("UpdateSelectionControls", cancellationFields)!.Invoke(configured, null);
+    if (stopButton.Content!.ToString() != "Auto login enabled accounts" || stopButton.Classes.Contains("login-running"))
+        throw new Exception("Idle auto login button did not recover after cancellation.");
+}
+stoppedAccounts.Clear();
+Console.WriteLine("PASS: animated auto login button cancels batch and active input, blocks recovery, preserves sessions, and returns to idle.");
 Console.WriteLine("PASS: configured dashboard and maintenance persistence.");
 if (ThemeCatalog.All.Count != 16 || ThemeCatalog.All.Count(t => t.Artwork != null) != 12) throw new Exception("Theme picker must contain four dark UI and twelve artwork themes.");
 if (ThemeCatalog.All.Any(t => t.Id == "maw") || ThemeCatalog.Resolve("maw") is not { Id: "abyssea", SideArtwork: "Maw.jpg", Artwork: "Illustration6.jpg" }) throw new Exception("Existing Cavernous Maw selections must resolve to the merged Abyssea theme.");

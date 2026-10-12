@@ -1,4 +1,14 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="FFXILauncher.Desktop.MainWindow" Title="FFXI Account Manager" Width="1120" Height="960" MinWidth="820" MinHeight="650" Background="{DynamicResource ThemeBackgroundBrush}" Foreground="{DynamicResource ThemeTextBrush}">
+  <Window.Styles>
+    <Style Selector="Button.login-running">
+      <Style.Animations>
+        <Animation Duration="0:0:1.4" IterationCount="INFINITE" PlaybackDirection="Alternate">
+          <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.65" /></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+  </Window.Styles>
   <Grid>
     <Grid x:Name="ArtworkPanels" ColumnDefinitions="0,*" IsHitTestVisible="False">
       <Border x:Name="PortraitFrame" Grid.Column="0" ClipToBounds="True" IsVisible="False">

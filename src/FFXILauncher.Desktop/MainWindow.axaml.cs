@@ -49,6 +49,8 @@ public sealed partial class MainWindow : Window
     private readonly CancellationTokenSource shutdown = new();
     private bool configurationReadable = true;
     private bool batchLaunching;
+    private CancellationTokenSource? autoLoginBatchStop;
+    private bool AutoLoginActive => autoLoginBatchStop != null || accountCancellation.Count > 0;
     private bool addonDeploying;
     private readonly HashSet<Guid> selectedAccounts = [];
     private bool updatingSelection;
@@ -827,10 +829,16 @@ public sealed partial class MainWindow : Window
             CancelShutdownsButton.IsEnabled = shutdownStops.Count > 0;
             ApplyBulkPolicyButton.IsEnabled = count > 0 && configurationReadable;
             LaunchEnabledButton.IsEnabled = platform.CanLaunch && configurationReadable && !batchLaunching;
-            StartEnabledButton.IsEnabled = CanAutoLogin;
+            StartEnabledButton.IsEnabled = AutoLoginActive || CanAutoLogin;
             foreach (var launch in AccountList.GetLogicalDescendants().OfType<Button>().Where(b => b.Name?.StartsWith("Launch_", StringComparison.Ordinal) == true))
                 launch.IsEnabled = platform.CanLaunch && configurationReadable && !LoginOperationActive;
-            StartEnabledButton.Content = LoginOperationActive ? "Account operation in progress…" : "Auto login enabled accounts";
+            var stoppingLogin = autoLoginBatchStop?.IsCancellationRequested == true ||
+                accountCancellation.Values.Any(c => c.IsCancellationRequested);
+            StartEnabledButton.Content = AutoLoginActive
+                ? stoppingLogin ? "Stopping auto logins…" : "Stop auto logins · running"
+                : "Auto login enabled accounts";
+            StartEnabledButton.IsEnabled &= !stoppingLogin;
+            StartEnabledButton.Classes.Set("login-running", AutoLoginActive && !stoppingLogin);
             if (platform.CanLaunch)
             {
                 var inputActive = batchLaunching || accountCancellation.Count > 0;
@@ -842,7 +850,8 @@ public sealed partial class MainWindow : Window
             var problems = configuration.ConfiguredAccounts.Where(a => a.AutoLoginEnabled)
                 .Select(a => (Account: a, Problem: ManualLoginProblem(a))).Where(p => p.Problem != null)
                 .Select(p => p.Account.Label + ": " + p.Problem).ToArray();
-            ToolTip.SetTip(StartEnabledButton, LoginOperationActive ? "Wait for the current launch, login or shutdown to finish." :
+            ToolTip.SetTip(StartEnabledButton, AutoLoginActive ? "Click to cancel queued and active automatic logins. Existing POL and game windows stay open." :
+                LoginOperationActive ? "Wait for the current launch or shutdown to finish." :
                 uncertain.Count > 0 ? "Resolve the uncertain launch before starting another account." :
                 !platform.CanLaunch ? "Login automation requires Windows." :
                 !configurationReadable ? "Repair the configuration before starting accounts." :
@@ -926,10 +935,10 @@ public sealed partial class MainWindow : Window
         }
         finally { batchLaunching = false; UpdateSelectionControls(); }
     }
-    private async Task LaunchAccount(Guid id)
+    private async Task LaunchAccount(Guid id, CancellationToken cancellation = default)
     {
         if (shuttingDown.Count > 0 || shutdownCancelling.Count > 0 || forceClosing.Count > 0) { Log("Wait for shutdown or process cleanup to finish before opening another profile."); return; }
-        if (shutdown.IsCancellationRequested || intentionallyStopped.Contains(id) || shuttingDown.Contains(id)) return;
+        if (shutdown.IsCancellationRequested || cancellation.IsCancellationRequested || intentionallyStopped.Contains(id) || shuttingDown.Contains(id)) return;
         if (uncertain.Count > 0) { Log("An earlier launch is unresolved. Inspect POL sessions and restart the manager before retrying."); return; }
         if (sessions.TryGetValue(id, out var existing) && platform.Inspect(existing) != SessionHealth.Exited) { Log("This account already has a tracked session."); return; }
         if (pending.Count > 0) { Log("Another profile is launching. Wait for it to finish."); return; }
@@ -942,7 +951,8 @@ public sealed partial class MainWindow : Window
         statuses[id].Text = "Starting Windower…";
         try
         {
-            RememberSession(id, await platform.LaunchAsync(configuration, account, sessions.Values.ToArray(), shutdown.Token));
+            using var launchStop = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token, cancellation);
+            RememberSession(id, await platform.LaunchAsync(configuration, account, sessions.Values.ToArray(), launchStop.Token));
             Log(account.Label + ": POL identified and attached to this account.");
         }
         catch (OperationCanceledException) { Log("Queued launch cancelled."); }
@@ -1055,17 +1065,32 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void StopAutoLogins()
+    {
+        // Suppress recovery as well as the current queue. An explicit launch can
+        // resume an account; cancellation never closes its POL or game process.
+        foreach (var id in configuration.ConfiguredAccounts.Where(a => a.AutoLoginEnabled).Select(a => a.Id)
+                     .Concat(accountCancellation.Keys).Distinct()) intentionallyStopped.Add(id);
+        autoLoginBatchStop?.Cancel();
+        foreach (var cancellation in accountCancellation.Values.ToArray()) cancellation.Cancel();
+        Log("Automatic logins cancelled. Open POL and game sessions are preserved.");
+        UpdateSelectionControls();
+    }
+
     private async void StartEnabled(object? sender, RoutedEventArgs args)
     {
+        if (AutoLoginActive) { StopAutoLogins(); return; }
         if (batchLaunching || !CanAutoLogin) return;
+        using var batchStop = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        autoLoginBatchStop = batchStop;
         batchLaunching = true;
         UpdateSelectionControls();
-        StartEnabledButton.IsEnabled = false;
         LaunchEnabledButton.IsEnabled = false;
         try
         {
             maintenance.Worlds = configuration.ConfiguredAccounts.Select(a => a.World).Distinct().ToArray();
-            await maintenance.RefreshAsync(true, shutdown.Token);
+            await maintenance.RefreshAsync(true, batchStop.Token);
+            batchStop.Token.ThrowIfCancellationRequested();
             var enabled = configuration.ConfiguredAccounts.Where(a => a.AutoLoginEnabled).Select(a => a.Id).ToArray();
             if (enabled.Length == 0) { Log("Enable Auto login for at least one account."); return; }
             foreach (var id in enabled) intentionallyStopped.Remove(id);
@@ -1073,23 +1098,24 @@ public sealed partial class MainWindow : Window
             // startup overlap. No credential input starts until this pass ends.
             foreach (var id in enabled)
             {
-                if (shutdown.IsCancellationRequested || uncertain.Count > 0) return;
+                if (batchStop.IsCancellationRequested || uncertain.Count > 0) return;
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || !account.AutoLoginEnabled || intentionallyStopped.Contains(id)) continue;
                 var decision = EvaluateRecovery(account with { MaintainConnection = true });
                 if (!decision.Allowed || ManualLoginProblem(account) != null || !vault.Contains(id)) continue;
                 if (!sessions.TryGetValue(id, out var process) || platform.Inspect(process) == SessionHealth.Exited)
-                    await LaunchAccount(id);
+                    await LaunchAccount(id, batchStop.Token);
             }
             foreach (var id in enabled)
             {
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
-                if (account == null || !account.AutoLoginEnabled || shutdown.IsCancellationRequested || intentionallyStopped.Contains(id)) continue;
+                if (account == null || !account.AutoLoginEnabled || batchStop.IsCancellationRequested || intentionallyStopped.Contains(id)) continue;
                 await RunAutoLogin(account, validate: true);
                 if (uncertain.Count > 0) break;
             }
         }
-        finally { batchLaunching = false; UpdateSelectionControls(); }
+        catch (OperationCanceledException) { Log("Automatic login queue cancelled."); }
+        finally { autoLoginBatchStop = null; batchLaunching = false; UpdateSelectionControls(); }
     }
     private async Task RunAutoLogin(AccountConfiguration account, bool validate = false)
     {
@@ -1098,12 +1124,13 @@ public sealed partial class MainWindow : Window
         var readiness = validate ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
         if (readiness != null) { statuses[account.Id].Text = readiness; Log(account.Label + ": " + readiness); return; }
         if (!vault.Contains(account.Id)) { statuses[account.Id].Text = "Auto login needs saved credentials"; return; }
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token, autoLoginBatchStop?.Token ?? CancellationToken.None);
         accountCancellation[account.Id] = cancellation;
         UpdateSelectionControls();
         try
         {
-            if (!sessions.TryGetValue(account.Id, out var process) || platform.Inspect(process) == SessionHealth.Exited) await LaunchAccount(account.Id);
+            if (!sessions.TryGetValue(account.Id, out var process) || platform.Inspect(process) == SessionHealth.Exited) await LaunchAccount(account.Id, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
             if (intentionallyStopped.Contains(account.Id) || !sessions.TryGetValue(account.Id, out process) || platform.Inspect(process) == SessionHealth.Exited) return;
             if (validate && autoLogin is WindowsAutoLogin windows)
             {

@@ -733,6 +733,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 previous = stage;
                 visits[stage] = visits.GetValueOrDefault(stage) + 1;
                 if (visits[stage] > 2 && stage is not LoginCheckpoint.Characters and not LoginCheckpoint.CharacterConfirmation) throw new LoginSafetyException("A login screen repeated unexpectedly. Automation stopped.");
+                cancellation.ThrowIfCancellationRequested();
                 report(stage switch { LoginCheckpoint.MemberList => "Selecting the saved POL member…", LoginCheckpoint.MemberInformation => memberSelectedByExactId ? "Following the verified POL Enter path…" : "Returning to the member list for exact-ID selection…", LoginCheckpoint.Connect => passwordEntered ? "Connecting to PlayOnline…" : "Opening the Square Enix password field…", LoginCheckpoint.PasswordEditor => "Entering the saved Square Enix password…", LoginCheckpoint.Title => "Selecting the configured character…", _ => "Login checkpoint: " + stage });
                 if (stage == LoginCheckpoint.CharacterConfirmation)
                 {
@@ -821,6 +822,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             if (passwordEntered)
                             {
                                 if (submitted) throw new LoginSafetyException("A credential submission was already attempted; automatic resubmission is blocked.");
+                                cancellation.ThrowIfCancellationRequested();
                                 submitted = true;
                                 Click(frame, "Connect");
                             }
@@ -839,7 +841,9 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                             var credentials = vault.Read(account.Id) ?? throw new LoginSafetyException("Save the Square Enix password before automatic login.");
                             if (string.IsNullOrEmpty(credentials.SquareEnixPassword)) throw new LoginSafetyException("The saved Square Enix password is empty.");
                             var entryClock = Stopwatch.StartNew();
-                            window.Password(credentials.SquareEnixPassword, cancellation); window.Key(0x0d); passwordEntered = true;
+                            window.Password(credentials.SquareEnixPassword, cancellation);
+                            cancellation.ThrowIfCancellationRequested();
+                            window.Key(0x0d); passwordEntered = true;
                             passwordMs = entryClock.ElapsedMilliseconds; break;
                         case LoginCheckpoint.Home: Click(frame, frame.UniqueLine("FINAL FANTASY XI") != null ? "FINAL FANTASY XI" : "FINAL FANTASY"); break;
                         case LoginCheckpoint.Play: window.ConfirmGameSelection(); break;
