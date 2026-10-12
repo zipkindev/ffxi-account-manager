@@ -1,5 +1,22 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+try {
+    $engine = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType=WindowsRuntime]::TryCreateFromLanguage(
+        [Windows.Globalization.Language, Windows.Globalization, ContentType=WindowsRuntime]::new('en-US'))
+    if ($null -eq $engine) {
+        Write-Output 'SKIP: this host lacks English Windows OCR language support; native OCR must be checked on a desktop Windows host.'
+        exit 0
+    }
+} catch {
+    # Windows Server runners may expose WinRT types without an OCR runtime.
+    # Do not treat fixture/read failures on a supported desktop as a skip.
+    if ($env:GITHUB_ACTIONS -eq 'true') {
+        Write-Output ('SKIP: hosted runner cannot initialize Windows OCR: ' + $_.Exception.Message)
+        exit 0
+    }
+    throw
+}
 $path = Join-Path $env:TEMP ('ffxi-ocr-scale-' + [Guid]::NewGuid().ToString('N') + '.png')
 $process = $null
 function Write-Fixture([int]$width, [int]$height, [bool]$game = $false) {
@@ -33,7 +50,7 @@ function Read-Fixture([string]$command) {
     $process.StandardInput.WriteLine($command); $process.StandardInput.Flush()
     $read = $process.StandardOutput.ReadLineAsync()
     if (-not $read.Wait(15000)) { throw 'OCR fixture read timed out.' }
-    if (-not $read.Result) { throw 'OCR fixture returned no frame.' }
+    if (-not $read.Result) { throw ('OCR fixture returned no frame: ' + $errors.GetAwaiter().GetResult()) }
     return $read.Result | ConvertFrom-Json
 }
 try {
