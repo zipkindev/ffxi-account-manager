@@ -2,6 +2,28 @@
 
 Windows-first account management and launch automation for Windower and Final Fantasy XI, built with Avalonia and .NET 10. Shared UI and core code support a future Linux/SteamDeck adapter.
 
+## App walkthrough
+
+These screenshots show the actual application UI with example accounts and no saved passwords. Captured in the cross-platform renderer; Windows-only launch controls are disabled in these examples.
+
+### Account dashboard and themes
+
+![Account dashboard with an FFXI artwork theme](docs/images/dashboard.png)
+
+Use the theme picker for a UI or artwork theme, toggle landscape cards, and drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
+
+### Configure an account
+
+![Account editor with example SE ID and Windower profile](docs/images/account-setup.png)
+
+Provide the SE ID and password, choose a Windower profile, and confirm character/world details. Already-saved POL credentials are reused; the app does not create a Square Enix account or POL member.
+
+### Bulk controls
+
+![Expanded bulk account controls](docs/images/bulk-actions.png)
+
+Select cards, then expand **Bulk actions** to apply settings or request graceful shutdown. Selection is independent of Auto login. Load the companion addon in running characters before using IPC shutdown controls.
+
 ## Features
 
 - Configure accounts with encrypted credentials, named Windower profiles, and separate Auto login, Maintain connection and maintenance scheduling switches.
@@ -17,7 +39,7 @@ Character stats and weather report once per minute. Session health heartbeats an
 
 ## Downloads and requirements
 
-Download the Windows x64 package from this repository’s GitHub Actions build artifacts (GitHub sign-in may be required). Extract the entire package before launching it. The self-contained build does not require a separate .NET installation.
+Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). Extract the entire package before launching it. The self-contained build does not require a separate .NET installation.
 
 You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
 

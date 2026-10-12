@@ -237,6 +237,7 @@ if (args.Contains("--maintenance-live"))
 }
 
 AppBuilder.Configure<App>().UseSkia().UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false }).SetupWithoutStarting();
+if (args.Contains("--readme-images")) { ReadmeImages.Render(); return; }
 if (args.Contains("--art-concepts")) { ArtworkConcepts.Render(); return; }
 var directory = Path.Combine(Path.GetTempPath(), "ffxi-ui-" + Guid.NewGuid());
 var window = new MainWindow(directory, false);
