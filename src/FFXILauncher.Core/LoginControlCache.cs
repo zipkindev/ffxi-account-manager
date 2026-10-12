@@ -109,7 +109,7 @@ public sealed class LoginControlCache(string directory, string binding)
                 w.Y >= frame.Height * .35 && w.Y + w.Height <= frame.Height * .6));
         if (line == null || LoginCheckpoints.ConfirmationButton(frame, "Yes") is not { Words: [var yes] }) return;
         var scale = Math.Round(yes.Height / 14 * 4) / 4;
-        if (scale is < .5 or > 3) return;
+        if (!double.IsFinite(scale) || scale <= 0) return;
         // OCR's glyph boxes fluctuate during animation. The fixed paired
         // dialog layout gives a repeatable region containing the whole prompt.
         var x = (int)Math.Floor((yes.X + yes.Width / 2) / 16) * 16 - (int)(160 * scale);

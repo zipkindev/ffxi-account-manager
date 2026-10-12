@@ -16,6 +16,9 @@ jobs:
         run: dotnet run --project tests/FFXILauncher.Core.Tests
       - name: Dashboard and Windows credential checks
         run: dotnet run --project tests/FFXILauncher.Desktop.Smoke
+      - name: Scaled Windows OCR
+        shell: powershell
+        run: ./tests/test_windows_ocr.ps1
       - name: Parse Windows scripts
         shell: pwsh
         run: |

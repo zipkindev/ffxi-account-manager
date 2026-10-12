@@ -177,7 +177,7 @@ public static class LoginCheckpoints
         var scale = Math.Round(yes.Height / 14 * 4) / 4;
         var x = yes.X + yes.Width / 2;
         var y = yes.Y + yes.Height / 2;
-        if (scale is < .5 or > 3 || x < frame.Width * .4 || x > frame.Width * .65 || y < frame.Height * .5 || y > frame.Height * .65) return null;
+        if (!double.IsFinite(scale) || scale <= 0 || x < frame.Width * .4 || x > frame.Width * .65 || y < frame.Height * .5 || y > frame.Height * .65) return null;
         x += 128 * scale;
         return x > frame.Width * .55 && x < frame.Width * .8 ? (x, y) : null;
     }
@@ -193,7 +193,7 @@ public static class LoginCheckpoints
         var scale = Math.Round(word.Height / 14 * 4) / 4;
         var x = frame.Width - 290 * scale;
         var y = word.Y + word.Height / 2 - 192 * scale;
-        if (scale is < .5 or > 3 || x < frame.Width * .65 || x > frame.Width * .95 || y < frame.Height * .5 || y > frame.Height * .85) return null;
+        if (!double.IsFinite(scale) || scale <= 0 || x < frame.Width * .65 || x > frame.Width * .95 || y < frame.Height * .5 || y > frame.Height * .85) return null;
         return (x, y);
     }
     public static (double X, double Y)? PasswordField(LoginFrame frame)

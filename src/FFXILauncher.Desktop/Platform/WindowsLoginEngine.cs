@@ -26,13 +26,14 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
     private async Task<LoginFrame> ReadFrame(CancellationToken cancellation, bool loadingOnly = false, bool confirmationOnly = false, bool characterGridOnly = false)
     {
         var clock = Stopwatch.StartNew();
+        var gameFrame = false;
         var captureUntil = DateTimeOffset.UtcNow.AddSeconds(2);
         while (true)
         {
             cancellation.ThrowIfCancellationRequested();
             var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
             var captured = false;
-            try { window.Capture(framePath); captured = true; }
+            try { window.Capture(framePath); gameFrame = window.IsGameWindow; captured = true; }
             catch (LoginObscuredException) when (DateTimeOffset.UtcNow < captureUntil) { }
             finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
             if (captured) break;
@@ -52,7 +53,9 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             _ = ocr.StandardError.ReadToEndAsync();
         }
         if (ocr.HasExited) throw new LoginSafetyException("Windows OCR stopped. Login input was paused.");
-        await ocr.StandardInput.WriteLineAsync((characterGridOnly ? "read-grid" : confirmationOnly ? "read-confirmation" : loadingOnly ? "read-loading" : "read").AsMemory(), cancellation);
+        var readCommand = characterGridOnly ? "read-grid" : confirmationOnly ? "read-confirmation" : gameFrame ? "read-game" : "read-pol";
+        if (loadingOnly && !characterGridOnly && !confirmationOnly) readCommand += "-loading";
+        await ocr.StandardInput.WriteLineAsync(readCommand.AsMemory(), cancellation);
         await ocr.StandardInput.FlushAsync(cancellation);
         var text = await ocr.StandardOutput.ReadLineAsync(cancellation).AsTask().WaitAsync(TimeSpan.FromSeconds(15), cancellation);
         if (text == null || text.Length > 200000) throw new LoginSafetyException("Windows OCR returned no usable screen evidence.");

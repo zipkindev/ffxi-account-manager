@@ -419,6 +419,12 @@ LoginFrame PasswordDialog(int width, int height) => new(width, height,
 var smallField = LoginCheckpoints.PasswordField(PasswordDialog(640, 480));
 var largeField = LoginCheckpoints.PasswordField(PasswordDialog(1280, 960));
 Check(smallField != null && largeField != null && largeField.Value.X == smallField.Value.X * 2 && largeField.Value.Y == smallField.Value.Y * 2, "POL password field follows detected label row and scales with client dimensions");
+foreach (var width in new[] { 800, 1600, 3200, 5120 })
+{
+    var height = width * 3 / 4;
+    var point = LoginCheckpoints.PasswordField(PasswordDialog(width, height));
+    Check(point != null && Math.Abs(point.Value.X / width - .705) < .000001 && Math.Abs(point.Value.Y / height - .4325) < .000001, "password input stays relative to client bounds across varying sizes");
+}
 var passwordDialog = PasswordDialog(640, 480);
 Check(LoginCheckpoints.PasswordField(passwordDialog with { Lines = [..passwordDialog.Lines, passwordDialog.Lines[1]] }) == null, "duplicate password labels block field input");
 Check(LoginCheckpoints.PasswordField(passwordDialog with { Lines = [passwordDialog.Lines[1]] }) == null, "password label alone cannot authorize a field click");
@@ -456,6 +462,7 @@ var grid = CharacterGrid(1440, 900, 1);
 var firstCandidate = LoginCheckpoints.InitialCharacterCandidate(grid);
 var scaledCandidate = LoginCheckpoints.InitialCharacterCandidate(CharacterGrid(2880, 1800, 2));
 Check(firstCandidate != null && scaledCandidate != null && scaledCandidate.Value.X == firstCandidate.Value.X * 2 && scaledCandidate.Value.Y == firstCandidate.Value.Y * 2, "character grid follows the measured UI font and footer anchor when scaled");
+Check(LoginCheckpoints.InitialCharacterCandidate(CharacterGrid(5760, 3600, 4)) == (4600d, 2596d), "large game UI candidate remains anchored without a three-times scale ceiling");
 Check(LoginCheckpoints.InitialCharacterCandidate(CharacterGrid(1600, 900, 1))?.X == firstCandidate?.X + 160, "wider game window preserves the grid's right anchor");
 Check(LoginCheckpoints.InitialCharacterCandidate(grid with { Lines = [..grid.Lines, grid.Lines[0]] }) == null, "ambiguous footer blocks candidate clicks");
 Check(LoginCheckpoints.InitialCharacterCandidate(LoginScreen("Select a character to play", "0 more characters can be made")) == null, "invalid footer geometry blocks candidate clicks");
@@ -476,6 +483,8 @@ var missingCancelCaption = new LoginFrame(1280, 800, [new("Log in with 'Luckystr
 Check(LoginCheckpoints.ConfirmationCancelPoint(missingCancelCaption, "Luckystrikes") == (805d, 426.25d), "missing cancel caption follows validated paired-button layout");
 var scaledCancelCaption = missingCancelCaption with { Width = 2560, Height = 1600, Lines = missingCancelCaption.Lines.Select(l => l with { Words = l.Words.Select(w => w with { X = w.X * 2, Y = w.Y * 2, Width = w.Width * 2, Height = w.Height * 2 }).ToArray() }).ToArray() };
 Check(LoginCheckpoints.ConfirmationCancelPoint(scaledCancelCaption, "Luckystrikes") == (1610d, 852.5d), "cancel layout scales with rendered caption geometry");
+var fourTimesCancel = missingCancelCaption with { Width = 5120, Height = 3200, Lines = missingCancelCaption.Lines.Select(l => l with { Words = l.Words.Select(w => w with { X = w.X * 4, Y = w.Y * 4, Width = w.Width * 4, Height = w.Height * 4 }).ToArray() }).ToArray() };
+Check(LoginCheckpoints.ConfirmationCancelPoint(fourTimesCancel, "Luckystrikes") is {} bigCancel && bigCancel.X > 5120 * .55 && bigCancel.X < 5120 * .8, "large confirmation fallback stays within its validated dialog without a scale ceiling");
 Check(LoginCheckpoints.ConfirmationCancelPoint(missingCancelCaption, "Luckystrike") == null, "cancel fallback requires the exact configured prompt");
 Check(LoginCheckpoints.ConfirmationCancelPoint(missingCancelCaption with { Lines = [..missingCancelCaption.Lines, new("Error code", [])] }, "Luckystrikes") == null, "error overlay blocks paired-button cancel");
 Check(LoginCheckpoints.ConfirmationCancelPoint(confirmationButtons with { Lines = [..confirmationButtons.Lines, new("No", [new("No", 100, 100, 25, 16)])] }, "Minibubble") == null, "ambiguous cancel captions never use geometry fallback");

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$ImagePath, [ValidateRange(1,3)][int]$Scale = 2, [switch]$Server)
+param([Parameter(Mandatory=$true)][string]$ImagePath, [ValidateRange(1,3)][int]$Scale = 2, [switch]$Server, [ValidateSet("Auto","POL","FFXI")][string]$WindowKind = "Auto")
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
@@ -68,9 +68,12 @@ function ReadRegion($Image, $Rectangle, [bool]$Contrast = $false, [int]$RegionSc
         $writer.Dispose(); $stream.Dispose(); $encoded.Dispose(); $graphics.Dispose(); $scaled.Dispose()
     }
 }
-function ReadLoginFrame([bool]$LoadingOnly = $false, [bool]$ConfirmationOnly = $false, [bool]$CharacterGridOnly = $false) {
+function ReadLoginFrame([bool]$LoadingOnly = $false, [bool]$ConfirmationOnly = $false, [bool]$CharacterGridOnly = $false, [ValidateSet("Auto","POL","FFXI")][string]$ScreenKind = $WindowKind) {
 $image = [System.Drawing.Bitmap]::new($ImagePath)
 try {
+    # Window context selects the UI layout; client dimensions only scale regions.
+    $isPol = $ScreenKind -ne "FFXI"
+    $isGame = $ScreenKind -ne "POL"
     $lines = [System.Collections.Generic.List[object]]::new()
     $rectangles = @([System.Drawing.Rectangle]::new(0,0,$image.Width,$image.Height))
     # OCR small FFXI buttons at their native detail without exceeding the Windows OCR bitmap limit.
@@ -78,22 +81,26 @@ try {
         $rectangles += [System.Drawing.Rectangle]::new([int]($image.Width * 0.25), [int]($image.Height * 0.3), [int]($image.Width * 0.5), [int]($image.Height * 0.55))
     }
     $passes = @($rectangles | ForEach-Object { @{ Rect=$_; Contrast=$false } })
-    if ($image.Width -lt 1000) {
+    if ($isPol) {
         # POL's small account IDs need independent high-resolution reads.
         # Preserve the exact resulting text; do not substitute similar glyphs.
         $identity = [System.Drawing.Rectangle]::new([int]($image.Width * 0.32), [int]($image.Height * 0.18), [int]($image.Width * 0.64), [int]($image.Height * 0.52))
+        # Native-resolution evidence complements magnification on enlarged glyphs.
+        $passes += @{ Rect=$identity; Contrast=$false; Scale=1 }
+        $passes += @{ Rect=$identity; Contrast=$true; Scale=1 }
         $passes += @{ Rect=$identity; Contrast=$false; Scale=3 }
         $passes += @{ Rect=$identity; Contrast=$true; Scale=3 }
+
     }
-    if ($image.Width -ge 1000) {
+    if ($isGame) {
         $passes += @{ Rect=[System.Drawing.Rectangle]::new([int]($image.Width * 0.25), [int]($image.Height * 0.3), [int]($image.Width * 0.5), [int]($image.Height * 0.55)); Contrast=$true; Scale=3 }
     }
-    if ($image.Width -ge 1000) {
+    if ($isGame) {
         $detail = [System.Drawing.Rectangle]::new(0, [int]($image.Height * 0.65), [int]($image.Width * 0.25), [int]($image.Height * 0.25))
         $passes += @{ Rect=$detail; Contrast=$false }
         $passes += @{ Rect=$detail; Contrast=$true }
     }
-    if ($image.Width -ge 1000) {
+    if ($isGame) {
         $confirmation = [System.Drawing.Rectangle]::new([int]($image.Width * 0.3), [int]($image.Height * 0.38), [int]($image.Width * 0.4), [int]($image.Height * 0.28))
         $passes += @{ Rect=$confirmation; Contrast=$false; Scale=3 }
         $passes += @{ Rect=$confirmation; Contrast=$true; Scale=3 }
@@ -142,13 +149,13 @@ try {
             # their independent crops before credentials can be authorized.
             $text = (@($lines | ForEach-Object { $_.Text }) -join ' ') -replace '[^a-zA-Z0-9]', ''
             $text = $text.ToLowerInvariant()
-            $clearGameScreen = $image.Width -ge 1000 -and (
+            $clearGameScreen = $isGame -and (
                 ($text.Contains('selectcharacter') -and $text.Contains('createcharacter') -and $text.Contains('deletecharacter')) -or
                 ($text.Contains('selectacharactertoplay') -and $text.Contains('morecharacterscanbemade')) -or
                 ((@($lines | Where-Object { $_.Text -match '(?i)log\s*i\s*n\s*with\s*["“][A-Za-z]+["”]\s*\?' }).Count -eq 1) -and $text.Contains('yes') -and $text.Contains('no')) -or
                 ($text.Contains('accept') -and ($text.Contains('decline') -or $text.Contains('useragreement')) -and
                     ($text.Contains('finalfantasyxi') -or $text.Contains('rulesofconduct'))))
-            $clearPolScreen = $image.Width -lt 1000 -and (
+            $clearPolScreen = $isPol -and (
                 $text.Contains('softwarekeyboard') -or $text.Contains('connecttoplayonline') -or
                 ($text.Contains('navigator') -and $text.Contains('logout') -and $text.Contains('finalfantasy')) -or
                 ($text.Contains('awordtoourplayers') -and $text.Contains('play') -and $text.Contains('back')))
@@ -169,9 +176,13 @@ try {
 }
 if ($Server) {
     while ($null -ne ($command = [Console]::ReadLine())) {
-        if ($command -ceq 'read') { ReadLoginFrame }
-        elseif ($command -ceq 'read-confirmation') { ReadLoginFrame -ConfirmationOnly $true }
-        elseif ($command -ceq 'read-grid') { ReadLoginFrame -CharacterGridOnly $true }
+        if ($command -ceq 'read-pol') { ReadLoginFrame -ScreenKind POL }
+        elseif ($command -ceq 'read-game') { ReadLoginFrame -ScreenKind FFXI }
+        elseif ($command -ceq 'read-pol-loading') { ReadLoginFrame -LoadingOnly $true -ScreenKind POL }
+        elseif ($command -ceq 'read-game-loading') { ReadLoginFrame -LoadingOnly $true -ScreenKind FFXI }
+        elseif ($command -ceq 'read') { ReadLoginFrame }
+        elseif ($command -ceq 'read-confirmation') { ReadLoginFrame -ConfirmationOnly $true -ScreenKind FFXI }
+        elseif ($command -ceq 'read-grid') { ReadLoginFrame -CharacterGridOnly $true -ScreenKind FFXI }
         elseif ($command -ceq 'read-loading') { ReadLoginFrame $true }
         else { break }
     }

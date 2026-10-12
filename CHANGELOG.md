@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.14
+
+- OCR now selects POL or FFXI regions using the owned window’s context instead of a 1,000-pixel width cutoff.
+- Scaled POL member lists retain detailed identity reads at larger sizes. Regions and returned coordinates follow actual client dimensions.
+- Removed the three-times glyph-scale ceiling from bounded game-menu fallback geometry; cached controls remain tied to the validated window size.
+
 ## 1.0.13
 
 - World Map and Zilart now use the selected full artwork, centered on the female figure and chocobo rider in the main area.
