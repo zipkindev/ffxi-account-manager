@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.22
+
+- Tracked in-game maintenance warnings and reconnect holds appear only in the shared Server maintenance section, once per world/message.
+- Character cards retain only their applicable official scheduled notice. Tracking, completed-warning acknowledgement, and recovery holds are preserved.
+
 ## 1.0.21
 
 - Startup zero HP no longer implies death. Confirmed death requires dead status plus zero HP outside Mog House/Mog Garden. Incomplete vitals display Alive with HP/MP pending.

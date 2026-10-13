@@ -1198,16 +1198,6 @@ public sealed partial class MainWindow : Window
                 if (snapshot.ReviewRequired?.Count > 0) rows.Add("Notice(s) need review; schedule may be incomplete.");
             }
             ToolTip.SetTip(display, alertWindow == null ? null : "Official notice: " + alertWindow.Title + "\n" + alertWindow.Source);
-            foreach (var alert in GameAlerts(account))
-            {
-                var hold = InGameMaintenance.Hold([alert], snapshot, now);
-                if (hold == null && AddonDataDirectory is {} resolvedData) InGameMaintenance.Acknowledge(resolvedData, alert);
-                if (alertWindow != null)
-                {
-                    rows.Add($"In-game alert · {alert.Character}/{alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
-                    rows.Add(hold == null ? "Posted window finished; reconnect hold released" : hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
-                }
-            }
             display.Text = string.Join("\n", rows);
             if (display.Parent is Border panel) panel.IsVisible = configuration.ShowCardMaintenance && rows.Count > 0;
         }
@@ -1219,8 +1209,17 @@ public sealed partial class MainWindow : Window
         var rows = new List<string> { maintenance.Status };
         rows.AddRange(maintenance.Snapshot.Windows.Where(w => w.EndUtc > now)
             .Select(w => $"{(w.World ?? "Global")}: {MaintenanceTimeDisplay.Range(w.StartUtc, w.EndUtc)}"));
-        foreach (var alert in configuration.ConfiguredAccounts.SelectMany(GameAlerts).DistinctBy(a => a.World + "\n" + a.Message))
+        var alerts = configuration.ConfiguredAccounts.SelectMany(GameAlerts).Distinct().ToArray();
+        foreach (var alert in alerts)
+            if (InGameMaintenance.Hold([alert], maintenance.Snapshot, now) == null && AddonDataDirectory is {} resolvedData)
+                InGameMaintenance.Acknowledge(resolvedData, alert);
+        foreach (var alert in alerts.OrderByDescending(a => a.ObservedUtc).DistinctBy(a => a.World + "\n" + a.Message))
+        {
+            var hold = InGameMaintenance.Hold([alert], maintenance.Snapshot, now);
+            if (hold == null) continue;
             rows.Add($"In-game alert · {alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
+            rows.Add(hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
+        }
         MaintenanceStatus.Text = string.Join("\n", rows);
     }
     private async Task CheckRecovery()

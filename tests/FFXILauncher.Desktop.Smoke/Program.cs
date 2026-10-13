@@ -425,6 +425,23 @@ if (!settingsPanel.GetLogicalDescendants().Contains(configured.FindControl<Check
 var alertHours = configured.FindControl<NumericUpDown>("CardMaintenanceHoursInput")!;
 var displayWarningPath = Path.Combine(playerData, "odin_hauplibond.alert");
 File.WriteAllText(displayWarningPath, playerPayload + "incoming-017-system\nEmergency maintenance will begin soon.\n");
+var duplicateWarningPaths = new[] { "Minibubble", "Nanakia" }.Select(name => Path.Combine(playerData, "odin_" + name.ToLowerInvariant() + ".alert")).ToArray();
+foreach (var warningPath in duplicateWarningPaths)
+{
+    var character = Path.GetFileNameWithoutExtension(warningPath)[5..];
+    File.WriteAllText(warningPath, playerPayload.Replace("Hauplibond", character) + "incoming-017-system\nEmergency maintenance will begin soon.\n");
+}
+alertHours.Value = 6;
+Dispatcher.UIThread.RunJobs();
+if (scheduleLabels.Any(t => t.Text!.Contains("In-game") || t.Text!.Contains("Emergency maintenance") || t.Text!.Contains("reconnect paused")))
+    throw new Exception("Tracked in-game messages and holds must not be repeated on character cards.");
+var sharedNotices = configured.FindControl<TextBlock>("MaintenanceStatus")!.Text!;
+if (sharedNotices.Split("Emergency maintenance will begin soon.").Length != 2)
+    throw new Exception("Identical warnings observed by three characters must appear once in the shared maintenance section.");
+if (InGameMaintenance.Read(playerData, "Odin", DateTimeOffset.UtcNow).Count != 3 ||
+    InGameMaintenance.Hold(InGameMaintenance.Read(playerData, "Odin", DateTimeOffset.UtcNow), scheduleFixtures, DateTimeOffset.UtcNow) == null)
+    throw new Exception("Deduplicating warning display must retain every tracked source and its recovery hold.");
+foreach (var warningPath in duplicateWarningPaths) File.Delete(warningPath);
 alertHours.Value = 0;
 Dispatcher.UIThread.RunJobs();
 if (scheduleLabels.Any(t => t.Parent is Border panel && panel.IsVisible)) throw new Exception("The global zero-hour preference must hide upcoming notices on all cards.");
