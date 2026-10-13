@@ -8,7 +8,7 @@ using FFXILauncher.Core;
 namespace FFXILauncher.Desktop.Platform;
 
 internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0);
-internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false);
+internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false);
 
 public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomation, IDisposable
 {
@@ -18,6 +18,8 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
     private Process? worker;
     private string? sessionDirectory, token;
     internal string? CapturePath => sessionDirectory == null ? null : Path.Combine(sessionDirectory, "frame.bmp");
+    internal LoginCheckpoint? LastInspectionCheckpoint { get; private set; }
+    internal bool LastInspectionCredentialRejected { get; private set; }
     internal string? LastSectionResult { get; private set; }
     public event Action<Guid, string>? Progress;
     public string? SetupProblem(AccountConfiguration account) => LoginCheckpoints.Requirements(account) ??
@@ -41,6 +43,8 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
             await EnsureWorker(cancellation);
             nonce = Guid.NewGuid().ToString("N");
             LastSectionResult = null;
+            LastInspectionCheckpoint = null;
+            LastInspectionCredentialRejected = false;
             WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, DateTimeOffset.UtcNow.AddMinutes(8), inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs));
             var deadline = DateTimeOffset.UtcNow.AddMinutes(8); string? stage = null;
             while (DateTimeOffset.UtcNow < deadline)
@@ -55,6 +59,8 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                     {
                         if (!reply.Success) throw new InvalidOperationException(reply.Stage);
                         if (memberSectionOnly || trainingSection != "") LastSectionResult = reply.Stage;
+                        LastInspectionCheckpoint = reply.InspectedCheckpoint;
+                        LastInspectionCredentialRejected = reply.CredentialRejected;
                         return reply.FullFlowValidated;
                     }
                 }
@@ -216,7 +222,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                         var config = new ConfigurationStore(root).Load(); var account = config.ConfiguredAccounts.Single(a => a.Id == request.Account);
                         var engine = new WindowsLoginEngine(directory, config, account, request.Process, Report);
                         engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs).GetAwaiter().GetResult();
-                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, request.InspectOnly ? "Calibration capture saved." : request.MemberSectionOnly || request.TrainingSection != "" ? engine.MemberSectionResult ?? "Section completed without a full login proof." : "Character and world verified online.", true, true, !request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && engine.FullFlowValidated));
+                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, request.InspectOnly ? "Calibration capture saved." : request.MemberSectionOnly || request.TrainingSection != "" ? engine.MemberSectionResult ?? "Section completed without a full login proof." : "Character and world verified online.", true, true, !request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && engine.FullFlowValidated, engine.InspectedCheckpoint, engine.InspectedCredentialRejection));
                     }
                     catch (Exception ex)
                     {

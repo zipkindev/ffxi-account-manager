@@ -127,3 +127,7 @@ The trained POL action sequence and timings use v1.0.14 as the working baseline.
 ### Character reports
 
 FFXIManager publishes player data immediately when loaded or when the character logs in, refreshes it after 15 seconds, then resumes once-per-minute display reports. Zone and life-state changes also refresh the display; the control heartbeat is independent. Startup zero HP does not imply death. Death requires a dead player status plus zero HP, and Mog House/Mog Garden reports default alive. Missing startup vitals are shown as pending rather than as confirmed zero values. Running games need one `//lua reload FFXIManager` after an addon update; new sessions load it automatically.
+
+### Maintenance lifecycle
+
+Tracked in-game warnings appear once per world/message in the shared Server maintenance section. Cards show only applicable official schedules using the global display threshold. Upcoming notices do not add an early login hold; scheduled shutdown still uses the configured maintenance policy’s five-minute lead. During active maintenance, live sessions receive graceful shutdown and confirmed errored sessions without live heartbeats can be closed using their exact tracked process identity. Maintained accounts become eligible to start fresh at the official window end. Credential rejection pauses automatic restart for user review.

@@ -50,18 +50,30 @@ public static class InGameMaintenance
         }
         return alerts;
     }
+    private static MaintenanceWindow[] Matching(InGameMaintenanceAlert alert, MaintenanceSnapshot snapshot) =>
+        snapshot.Windows.Where(w => MaintenanceSchedule.Applies(w, alert.World) &&
+            w.EndUtc >= alert.ObservedUtc && w.StartUtc <= alert.ObservedUtc.AddHours(2)).ToArray();
+    private static bool Fresh(MaintenanceSnapshot snapshot, DateTimeOffset now) =>
+        snapshot.CheckedUtc != null && now - snapshot.CheckedUtc <= TimeSpan.FromMinutes(15) && snapshot.ReviewRequired?.Count is not > 0;
+    public static bool Completed(InGameMaintenanceAlert alert, MaintenanceSnapshot snapshot, DateTimeOffset now)
+    {
+        var matching = Matching(alert, snapshot);
+        return Fresh(snapshot, now) && matching.Length > 0 && now >= matching.Max(w => w.EndUtc);
+    }
     public static RecoveryDecision? Hold(IEnumerable<InGameMaintenanceAlert> alerts, MaintenanceSnapshot snapshot, DateTimeOffset now)
     {
         foreach (var alert in alerts.OrderByDescending(a => a.ObservedUtc))
         {
             // A previously completed window cannot explain a newly received warning.
-            var matching = snapshot.Windows.Where(w => MaintenanceSchedule.Applies(w, alert.World) &&
-                w.EndUtc >= alert.ObservedUtc && w.StartUtc <= alert.ObservedUtc.AddHours(2)).ToArray();
+            var matching = Matching(alert, snapshot);
             if (matching.Length == 0) return new(false, "In-game maintenance warning · end time needs review");
-            if (snapshot.CheckedUtc == null || now - snapshot.CheckedUtc > TimeSpan.FromMinutes(15) || snapshot.ReviewRequired?.Count > 0)
+            if (!Fresh(snapshot, now))
                 return new(false, "In-game maintenance warning · waiting for confirmed schedule");
-            var end = matching.Max(w => w.EndUtc).AddMinutes(2);
-            if (now < end) return new(false, "In-game maintenance warning · reconnect paused", end);
+            // Announcements can precede scheduled maintenance by hours.
+            // They must not widen an upcoming official window into an active hold.
+            if (now < matching.Min(w => w.StartUtc)) continue;
+            var active = matching.Where(w => now >= w.StartUtc && now < w.EndUtc).OrderByDescending(w => w.EndUtc).FirstOrDefault();
+            if (active != null) return new(false, "In-game maintenance warning · reconnect paused", active.EndUtc);
         }
         return null;
     }

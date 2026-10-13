@@ -210,7 +210,8 @@ var maintenanceWindow = new MaintenanceWindow("https://www.playonline.com/ff11us
 var maintainedAccount = new AccountConfiguration(Guid.NewGuid(), "Main", "Main", "Hauplibond", "Odin", "", "", true);
 Check(maintainedAccount.AutoLoginEnabled, "legacy maintained accounts include auto login");
 Check(!RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow], maintenanceStart.AddMinutes(1)).Allowed, "maintenance prevents retries");
-Check(!RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow], maintenanceEnd.AddMinutes(1)).Allowed, "post-maintenance grace period prevents mass retry");
+Check(RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow], maintenanceEnd).Allowed, "reconnect is eligible at the official end without the former two-minute buffer");
+Check(!RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow], maintenanceEnd.AddTicks(-1)).Allowed, "reconnect remains held until the end boundary");
 Check(RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow], maintenanceEnd.AddMinutes(3)).Allowed, "reconnect eligible after maintenance");
 Check(!RecoveryPolicy.Evaluate(maintainedAccount, true, [], maintenanceEnd).Allowed, "intentional shutdown prevents reconnect");
 Check(RecoveryPolicy.Evaluate(maintainedAccount, false, [maintenanceWindow with { World = "Asura" }], maintenanceStart).Allowed, "unaffected world may reconnect");
@@ -379,7 +380,31 @@ Check(!WindowerStartupScript.EnsureAutoLoad(System.Text.Encoding.ASCII.GetBytes(
 var alertTime = scheduleNow;
 var alert = InGameMaintenance.Parse(["1234567890abcdef_123456", "Mainchar", "Odin", alertTime.AddHours(-1).ToUnixTimeSeconds().ToString(), alertTime.ToUnixTimeSeconds().ToString(), "incoming-017-system", "Emergency maintenance will begin shortly."], alertTime) ?? throw new Exception("Valid alert rejected");
 Check(InGameMaintenance.Hold([alert], new([], alertTime), alertTime)?.Allowed == false, "in-game warning without end time holds reconnect for review");
-Check(InGameMaintenance.Hold([alert], new([odinNext], alertTime), alertTime)?.ResumeUtc == odinNext.EndUtc.AddMinutes(2), "in-game warning uses relevant official maintenance end plus buffer");
+Check(InGameMaintenance.Hold([alert], new([odinNext], alertTime), alertTime) == null, "upcoming official maintenance does not let an early warning block login");
+Check(!InGameMaintenance.Completed(alert, new([odinNext], alertTime), alertTime), "upcoming warning stays tracked rather than being acknowledged as completed");
+Check(InGameMaintenance.Hold([alert], new([odinNext], odinNext.StartUtc), odinNext.StartUtc)?.ResumeUtc == odinNext.EndUtc, "in-game hold begins at the relevant official start boundary");
+Check(InGameMaintenance.Completed(alert, new([odinNext], odinNext.EndUtc.AddMinutes(3)), odinNext.EndUtc.AddMinutes(3)), "only completed matching maintenance may automatically acknowledge its warning");
+Check(!InGameMaintenance.Completed(alert, new([asuraNext], alertTime), alertTime), "unmatched warning cannot be acknowledged by another world's schedule");
+Check(InGameMaintenance.Hold([alert], new([odinNext], odinNext.EndUtc), odinNext.EndUtc) == null &&
+    InGameMaintenance.Completed(alert, new([odinNext], odinNext.EndUtc), odinNext.EndUtc), "in-game hold releases and warning completes exactly at the official end");
+var cleanupAccount = maintainedAccount with { ScheduleMaintenance = true };
+var cleanupSnapshot = new MaintenanceSnapshot([maintenanceWindow], maintenanceStart);
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot, maintenanceStart, true, false) != null,
+    "confirmed error without live heartbeat is eligible for exact-process cleanup during active maintenance");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot, maintenanceStart.AddTicks(-1), true, false) == null,
+    "an upcoming maintenance warning cannot force-close a process before maintenance begins");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot with { CheckedUtc = maintenanceEnd }, maintenanceEnd, true, false) == null,
+    "maintenance cleanup cannot force-close after the window ends");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot, maintenanceStart, false, false) == null &&
+    MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot, maintenanceStart, true, true) == null,
+    "unconfirmed errors and live characters cannot qualify for forced maintenance error cleanup");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount with { ScheduleMaintenance = false }, cleanupSnapshot, maintenanceStart, true, false) == null &&
+    MaintenanceSchedule.ErrorCleanupDue(cleanupAccount with { MaintainConnection = false }, cleanupSnapshot, maintenanceStart, true, false) == null,
+    "disabled maintenance and disabled connection policies prevent automatic error cleanup");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount with { World = "Asura" }, cleanupSnapshot with { Windows = [maintenanceWindow with { World = "Odin" }] }, maintenanceStart, true, false) == null,
+    "another world's maintenance cannot authorize error cleanup");
+Check(MaintenanceSchedule.ErrorCleanupDue(cleanupAccount, cleanupSnapshot with { CheckedUtc = maintenanceStart.AddMinutes(-16) }, maintenanceStart, true, false) == null,
+    "stale schedule cannot authorize forced maintenance cleanup");
 Check(InGameMaintenance.Hold([alert], new([odinNext], odinNext.EndUtc.AddMinutes(3)), odinNext.EndUtc.AddMinutes(3)) == null, "confirmed completed maintenance releases in-game hold");
 Check(InGameMaintenance.Hold([alert], new([asuraNext], alertTime), alertTime)?.ResumeUtc == null, "another world's maintenance cannot resolve warning");
 Check(InGameMaintenance.Parse(["1234567890abcdef_123456", "Mainchar", "Odin", "1", "999999999999999999", "incoming-017-system", "maintenance"], alertTime) == null, "invalid in-game timestamps are rejected");
@@ -453,6 +478,11 @@ Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = [..Highl
     Check(cache.MatchLogIn(bitmapPath) == null, "changed highlighted-button pixels cannot replay the trained click");
     Directory.Delete(anchoredDirectory, true);
 }
+var maintenanceErrorFrame = new LoginFrame(640, 480, [new("Error code:POL-0010", [new("POL-0010", 70, 150, 95, 16)])]);
+Check(LoginCheckpoints.MaintenanceErrorCode(maintenanceErrorFrame) == "POL-0010", "maintenance cleanup requires a real numeric client error code in the dialog region");
+Check(LoginCheckpoints.MaintenanceErrorCode(LoginScreen("Error code", "Generic problem")) == null, "generic error text cannot authorize forced maintenance cleanup");
+Check(LoginCheckpoints.MaintenanceErrorCode(maintenanceErrorFrame with { Lines = [new("Error code:FFXI-3001", [new("FFXI-3001", 70, 440, 95, 16)])] }) == null,
+    "a code appearing in the chat footer cannot authorize forced maintenance cleanup");
 Check(!LoginCheckpoints.IsCredentialRejection(LoginScreen("Member Information", "Square Enix Password")) && !LoginCheckpoints.IsCredentialRejection(LoginScreen("Error code", "Connection failed")), "OCR misses and connection errors do not produce false credential alerts");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("The Square Enix ID or password is incorrect")), "explicit POL password rejection is classified for the requested warning");
 Check(LoginCheckpoints.IsCredentialRejection(LoginScreen("Square Enix Account Certification Error", "Error code:POL-5311", "The Square Enix ID, Square Enix password, or", "one-time password entered is incorrect.")), "actual POL-5311 screenshot wording reports credential rejection");

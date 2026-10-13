@@ -2,8 +2,10 @@
 
 ## 1.0.22
 
-- Tracked in-game maintenance warnings and reconnect holds appear only in the shared Server maintenance section, once per world/message.
-- Character cards retain only their applicable official scheduled notice. Tracking, completed-warning acknowledgement, and recovery holds are preserved.
+- In-game maintenance warnings appear once per world/message in Server maintenance; character cards show only their applicable official schedule.
+- Upcoming warnings no longer pause login before the scheduled maintenance interval. Warnings remain tracked until their matching maintenance completes.
+- Scheduled maintenance performs full graceful shutdown for live sessions. Confirmed error windows without live heartbeats can receive exact-process cleanup during active maintenance; credential rejection still requires attention before automatic retry.
+- Maintained accounts become eligible for clean startup at the official window end without the former two-minute buffer. Fresh POL launches overlap before the unchanged trained login route runs.
 
 ## 1.0.21
 

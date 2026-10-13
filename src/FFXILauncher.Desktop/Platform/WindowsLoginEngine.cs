@@ -10,6 +10,8 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
     private readonly string framePath = Path.Combine(directory, "frame.bmp");
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
     private bool identityVerified, passwordEntered, editorOpened, selectedCharacterVerified, characterConfirmed, returnedForIdentity, worldVerified;
+    public LoginCheckpoint? InspectedCheckpoint { get; private set; }
+    public bool InspectedCredentialRejection { get; private set; }
     public bool FullFlowValidated => identityVerified && passwordEntered && selectedCharacterVerified && characterConfirmed && worldVerified;
     internal string? MemberSectionResult { get; private set; }
     private int characterConfirmAttempts;
@@ -224,7 +226,22 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             if (!inspectOnly && window.IsGameWindow) window.ParkCursor();
         }
         finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
-        if (inspectOnly) { await ReadFrame(cancellation); report("Calibration capture saved."); return; }
+        if (inspectOnly)
+        {
+            var inspected = await ReadFrame(cancellation);
+            InspectedCheckpoint = LoginCheckpoints.Recognize(inspected);
+            if (InspectedCheckpoint == LoginCheckpoint.Error)
+            {
+                // Cleanup needs the same actual POL/FFXI code twice, away
+                // from the chat footer; generic Error text is not sufficient.
+                var firstCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
+                inspected = await ReadFrame(cancellation);
+                var secondCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
+                InspectedCheckpoint = firstCode != null && firstCode == secondCode ? LoginCheckpoint.Error : LoginCheckpoint.Unknown;
+                InspectedCredentialRejection = InspectedCheckpoint == LoginCheckpoint.Error && LoginCheckpoints.IsCredentialRejection(inspected);
+            }
+            report("Calibration capture saved."); return;
+        }
         if (trainingSection == "return")
         {
             await ReturnToGameMenu(cancellation);

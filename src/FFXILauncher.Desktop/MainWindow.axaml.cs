@@ -36,6 +36,8 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<Guid, CancellationTokenSource> accountCancellation = [];
     private readonly Dictionary<Guid, DateTimeOffset> nextRetry = [];
     private bool recoveryChecking;
+    private readonly Dictionary<Guid, MaintenanceWindow> maintenanceRestarts = [];
+    private readonly Dictionary<Guid, DateTimeOffset> nextMaintenanceInspection = [];
     private readonly HashSet<string> scheduledShutdowns = [];
     private LauncherConfiguration configuration = new();
     private readonly Dictionary<Guid, ManagedProcess> sessions = [];
@@ -466,7 +468,7 @@ public sealed partial class MainWindow : Window
                     var next = configuration with { Accounts = configuration.ConfiguredAccounts.Select(a => a.Id == account.Id ? a with { ScheduleMaintenance = scheduleToggle.IsChecked == true } : a).ToList() };
                     if (!configurationReadable) throw new InvalidOperationException("Configuration could not be loaded.");
                     store.Save(next); configuration = next;
-                    Log(account.Label + ": server maintenance scheduling " + (scheduleToggle.IsChecked == true ? "enabled. With Maintain connection enabled, shuts down 5 minutes before and queues login after the end plus 2 minutes. Automatic downtime stays paused until the Windows login adapter is ready." : "disabled."));
+                    Log(account.Label + ": server maintenance scheduling " + (scheduleToggle.IsChecked == true ? "enabled. With Maintain connection enabled, shuts down 5 minutes before and queues a clean login at the official window end." : "disabled."));
                 }
                 catch (Exception ex) { scheduleToggle.IsChecked = configuration.ConfiguredAccounts.Single(a => a.Id == account.Id).ScheduleMaintenance; Log("Could not save maintenance scheduling: " + ex.Message); }
                 finally { updatingSchedule = false; }
@@ -1144,7 +1146,12 @@ public sealed partial class MainWindow : Window
             Log(account.Label + ": character login verified.");
         }
         catch (OperationCanceledException) { Log(account.Label + ": automatic login cancelled."); }
-        catch (Exception ex) { nextRetry[account.Id] = DateTimeOffset.UtcNow.AddMinutes(5); Log(account.Label + ": login needs attention: " + ex.Message); }
+        catch (Exception ex)
+        {
+            if (ex.Message == "Could not validate user name or password. Please check.") intentionallyStopped.Add(account.Id);
+            nextRetry[account.Id] = DateTimeOffset.UtcNow.AddMinutes(5);
+            Log(account.Label + ": login needs attention: " + ex.Message);
+        }
         finally { accountCancellation.Remove(account.Id); UpdateSelectionControls(); }
     }
     private string? AddonDataDirectory => string.IsNullOrWhiteSpace(configuration.WindowerPath) ? null : Path.Combine(Path.GetDirectoryName(configuration.WindowerPath)!, "addons", "FFXIManager", "data");
@@ -1211,14 +1218,14 @@ public sealed partial class MainWindow : Window
             .Select(w => $"{(w.World ?? "Global")}: {MaintenanceTimeDisplay.Range(w.StartUtc, w.EndUtc)}"));
         var alerts = configuration.ConfiguredAccounts.SelectMany(GameAlerts).Distinct().ToArray();
         foreach (var alert in alerts)
-            if (InGameMaintenance.Hold([alert], maintenance.Snapshot, now) == null && AddonDataDirectory is {} resolvedData)
+            if (InGameMaintenance.Completed(alert, maintenance.Snapshot, now) && AddonDataDirectory is {} resolvedData)
                 InGameMaintenance.Acknowledge(resolvedData, alert);
         foreach (var alert in alerts.OrderByDescending(a => a.ObservedUtc).DistinctBy(a => a.World + "\n" + a.Message))
         {
             var hold = InGameMaintenance.Hold([alert], maintenance.Snapshot, now);
-            if (hold == null) continue;
+            if (InGameMaintenance.Completed(alert, maintenance.Snapshot, now)) continue;
             rows.Add($"In-game alert · {alert.World} · {alert.ObservedUtc.ToLocalTime():g}: {alert.Message}");
-            rows.Add(hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
+            if (hold != null) rows.Add(hold.Reason + (hold.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : "; clear selected worlds after review"));
         }
         MaintenanceStatus.Text = string.Join("\n", rows);
     }
@@ -1238,13 +1245,30 @@ public sealed partial class MainWindow : Window
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || intentionallyStopped.Contains(id) || shuttingDown.Contains(id) || platform.Inspect(process) != SessionHealth.Responsive) continue;
                 var window = MaintenanceSchedule.ShutdownDue(account, maintenance.Snapshot, DateTimeOffset.UtcNow);
-                if (window == null || autoLogin.ReadinessProblem(account) != null) continue;
+                if (window == null || AddonDataDirectory == null) continue;
+                var heartbeat = new ShutdownIpc(AddonDataDirectory).ReadSession(account, DateTimeOffset.UtcNow);
+                if (heartbeat == null || heartbeat.RegisteredUtc < process.StartedUtc.AddSeconds(-2))
+                {
+                    if (DateTimeOffset.UtcNow >= window.StartUtc && !LoginOperationActive)
+                        await CleanupMaintenanceError(account, process);
+                    continue;
+                }
                 var key = $"{id}|{process.Pid}|{process.StartedUtc.Ticks}|{window.Source}|{window.StartUtc.UtcTicks}";
                 if (!scheduledShutdowns.Add(key)) continue;
                 Log(account.Label + ": scheduled maintenance shutdown for " + window.Title);
                 await ShutdownAccount(id, scheduled: true);
+                if (platform.Inspect(process) == SessionHealth.Exited)
+                {
+                    maintenanceRestarts[id] = window;
+                    nextRetry.Remove(id);
+                }
             }
             if (LoginOperationActive || uncertain.Count > 0) return;
+            var restartIds = maintenanceRestarts.Where(pair => DateTimeOffset.UtcNow >= pair.Value.EndUtc &&
+                !intentionallyStopped.Contains(pair.Key) && sessions.TryGetValue(pair.Key, out var owned) && platform.Inspect(owned) == SessionHealth.Exited &&
+                configuration.ConfiguredAccounts.Any(a => a.Id == pair.Key && a.AutoLoginEnabled && a.MaintainConnection &&
+                    autoLogin.ReadinessProblem(a) == null && EvaluateRecovery(a).Allowed)).Select(pair => pair.Key).ToArray();
+            if (restartIds.Length > 0) { await RestartMaintenanceAccounts(restartIds); return; }
             foreach (var (id, process) in sessions.ToArray())
             {
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
@@ -1258,6 +1282,70 @@ public sealed partial class MainWindow : Window
         }
         finally { recoveryChecking = false; }
     }
+    private async Task CleanupMaintenanceError(AccountConfiguration account, ManagedProcess process)
+    {
+        if (autoLogin is not WindowsAutoLogin windows || windows.SetupProblem(account) != null || AddonDataDirectory is not {} data) return;
+        var now = DateTimeOffset.UtcNow;
+        if (nextMaintenanceInspection.TryGetValue(account.Id, out var next) && now < next) return;
+        nextMaintenanceInspection[account.Id] = now.AddSeconds(15);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        accountCancellation[account.Id] = cancellation;
+        UpdateSelectionControls();
+        try
+        {
+            await windows.RequestAsync(account, process, true, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            var currentAccount = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == account.Id);
+            if (currentAccount == null || intentionallyStopped.Contains(account.Id) ||
+                !sessions.TryGetValue(account.Id, out var owned) || owned != process) return;
+            var cleanupWindow = MaintenanceSchedule.ErrorCleanupDue(currentAccount, maintenance.Snapshot,
+                DateTimeOffset.UtcNow, windows.LastInspectionCheckpoint == LoginCheckpoint.Error,
+                new ShutdownIpc(data).ReadSession(currentAccount, DateTimeOffset.UtcNow) != null);
+            if (cleanupWindow == null) return;
+            if (windows.LastInspectionCredentialRejected) intentionallyStopped.Add(account.Id);
+            await WindowsProcessCleanup.TerminateAsync(process, configuration.PolPath, cancellation.Token);
+            maintenanceRestarts[account.Id] = cleanupWindow;
+            nextRetry.Remove(account.Id);
+            Log(account.Label + ": confirmed errored POL/FFXI process closed during maintenance; " +
+                (windows.LastInspectionCredentialRejected ? "credentials need attention before automatic restart." : "clean restart eligible at the official window end."));
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log(account.Label + ": maintenance error cleanup needs attention: " + ex.Message); }
+        finally { accountCancellation.Remove(account.Id); UpdateSelectionControls(); }
+    }
+    private async Task RestartMaintenanceAccounts(Guid[] ids)
+    {
+        using var batchStop = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        autoLoginBatchStop = batchStop;
+        batchLaunching = true;
+        UpdateSelectionControls();
+        try
+        {
+            // Open the fresh POL processes together, then serialize the existing
+            // trained login route. Never reopen unrelated or intentionally stopped accounts.
+            foreach (var id in ids)
+            {
+                batchStop.Token.ThrowIfCancellationRequested();
+                var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
+                if (intentionallyStopped.Contains(id) || account == null || !account.AutoLoginEnabled || !account.MaintainConnection || !EvaluateRecovery(account).Allowed) continue;
+                await LaunchAccount(id, batchStop.Token);
+                if (uncertain.Count > 0) return;
+            }
+            foreach (var id in ids)
+            {
+                batchStop.Token.ThrowIfCancellationRequested();
+                if (intentionallyStopped.Contains(id)) continue;
+                var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
+                if (account == null || !account.AutoLoginEnabled || !account.MaintainConnection || !EvaluateRecovery(account).Allowed) continue;
+                maintenanceRestarts.Remove(id);
+                await RunAutoLogin(account);
+                if (uncertain.Count > 0) return;
+            }
+        }
+        catch (OperationCanceledException) { Log("Maintenance restart batch cancelled; open sessions preserved."); }
+        finally { autoLoginBatchStop = null; batchLaunching = false; UpdateSelectionControls(); }
+    }
+
     private void CollectCharacterWorlds()
     {
         if (!configurationReadable || string.IsNullOrWhiteSpace(configuration.WindowerPath)) return;

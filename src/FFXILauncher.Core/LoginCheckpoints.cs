@@ -251,6 +251,19 @@ public static class LoginCheckpoints
             label.Words.Any(w => w.X < frame.Width * 0.1)) return null;
         return (x, y);
     }
+    public static string? MaintenanceErrorCode(LoginFrame frame)
+    {
+        if (Recognize(frame) != LoginCheckpoint.Error) return null;
+        foreach (var line in frame.Lines)
+        {
+            var code = Regex.Match(line.Text, @"\b(POL|FFXI)[\s:-]*(\d{4})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!code.Success || line.Words.Length == 0 || line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) ||
+                !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0 ||
+                w.X < 0 || w.X + w.Width > frame.Width || w.Y < frame.Height * .1 || w.Y + w.Height > frame.Height * .75)) continue;
+            return code.Groups[1].Value.ToUpperInvariant() + "-" + code.Groups[2].Value;
+        }
+        return null;
+    }
     public static bool IsCredentialRejection(LoginFrame frame) =>
         frame.Has("POL-5311") || frame.Has("password entered is incorrect") || frame.Has("Incorrect password") || frame.Has("Invalid password") || frame.Has("Wrong password") ||
         frame.Has("password is incorrect") || frame.Has("password is invalid") || frame.Has("ID or password are incorrect");

@@ -436,11 +436,12 @@ Dispatcher.UIThread.RunJobs();
 if (scheduleLabels.Any(t => t.Text!.Contains("In-game") || t.Text!.Contains("Emergency maintenance") || t.Text!.Contains("reconnect paused")))
     throw new Exception("Tracked in-game messages and holds must not be repeated on character cards.");
 var sharedNotices = configured.FindControl<TextBlock>("MaintenanceStatus")!.Text!;
+if (sharedNotices.Contains("reconnect paused")) throw new Exception("Upcoming tracked warnings cannot claim reconnect is already paused.");
 if (sharedNotices.Split("Emergency maintenance will begin soon.").Length != 2)
     throw new Exception("Identical warnings observed by three characters must appear once in the shared maintenance section.");
 if (InGameMaintenance.Read(playerData, "Odin", DateTimeOffset.UtcNow).Count != 3 ||
-    InGameMaintenance.Hold(InGameMaintenance.Read(playerData, "Odin", DateTimeOffset.UtcNow), scheduleFixtures, DateTimeOffset.UtcNow) == null)
-    throw new Exception("Deduplicating warning display must retain every tracked source and its recovery hold.");
+    InGameMaintenance.Hold(InGameMaintenance.Read(playerData, "Odin", DateTimeOffset.UtcNow), scheduleFixtures, DateTimeOffset.UtcNow) != null)
+    throw new Exception("Upcoming notices must retain all tracked sources without blocking login early.");
 foreach (var warningPath in duplicateWarningPaths) File.Delete(warningPath);
 alertHours.Value = 0;
 Dispatcher.UIThread.RunJobs();

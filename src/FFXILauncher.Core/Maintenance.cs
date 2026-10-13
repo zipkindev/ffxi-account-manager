@@ -26,6 +26,14 @@ public static class MaintenanceSchedule
         return snapshot.Windows.Where(w => Applies(w, account.World) && now >= w.StartUtc.AddMinutes(-5) && now < w.EndUtc)
             .OrderBy(w => w.StartUtc).FirstOrDefault();
     }
+    public static MaintenanceWindow? ErrorCleanupDue(AccountConfiguration account, MaintenanceSnapshot snapshot, DateTimeOffset now,
+        bool confirmedError, bool liveHeartbeat)
+    {
+        if (!confirmedError || liveHeartbeat) return null;
+        var window = ShutdownDue(account, snapshot, now);
+        return window != null && now >= window.StartUtc ? window : null;
+    }
+
 }
 
 public static class RecoveryPolicy
@@ -44,8 +52,8 @@ public static class RecoveryPolicy
         if (!account.MaintainConnection) return new(false, "Maintain connection disabled");
         if (string.IsNullOrWhiteSpace(account.World)) return new(false, "Character world needs verification");
         var active = windows.Where(w => MaintenanceSchedule.Applies(w, account.World) &&
-            now >= (account.ScheduleMaintenance ? w.StartUtc.AddMinutes(-5) : w.StartUtc) && now < w.EndUtc.AddMinutes(2)).OrderByDescending(w => w.EndUtc).FirstOrDefault();
-        return active == null ? new(true, "Ready for reconnect") : new(false, "Waiting for server maintenance", active.EndUtc.AddMinutes(2));
+            now >= (account.ScheduleMaintenance ? w.StartUtc.AddMinutes(-5) : w.StartUtc) && now < w.EndUtc).OrderByDescending(w => w.EndUtc).FirstOrDefault();
+        return active == null ? new(true, "Ready for reconnect") : new(false, "Waiting for server maintenance", active.EndUtc);
     }
 }
 
