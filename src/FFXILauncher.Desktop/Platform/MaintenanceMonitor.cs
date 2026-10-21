@@ -3,9 +3,11 @@ using System.Text.RegularExpressions;
 using FFXILauncher.Core;
 
 namespace FFXILauncher.Desktop.Platform;
-public sealed class MaintenanceMonitor(string directory) : IDisposable
+public sealed class MaintenanceMonitor(string directory, HttpMessageHandler? handler = null) : IDisposable
 {
-    private readonly HttpClient client = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient client = handler == null
+        ? new() { Timeout = TimeSpan.FromSeconds(15) }
+        : new(handler) { Timeout = TimeSpan.FromSeconds(15) };
     public MaintenanceSnapshot Snapshot { get; private set; } = new([], null);
     public string Status { get; private set; } = "Maintenance notices have not been checked.";
     public IReadOnlyList<string> Worlds { get; set; } = [];
@@ -57,7 +59,10 @@ public sealed class MaintenanceMonitor(string directory) : IDisposable
             Status = $"Official notices checked at {DateTime.Now:t}. {review.Count} notice(s) need scope/time-format review.";
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or TaskCanceledException or UnauthorizedAccessException)
+        // InvalidDataException does not derive from IOException. In particular,
+        // PlayOnline can redirect to a maintenance placeholder with HTTP 200.
+        // Keep the previous check time so an unavailable feed cannot look fresh.
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or JsonException or TaskCanceledException or UnauthorizedAccessException or RegexMatchTimeoutException or UriFormatException)
         { Status = "Official notices unavailable; retaining cached windows. " + ex.Message; }
         finally { checking = false; }
     }

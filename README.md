@@ -107,6 +107,14 @@ lua tests/test_manager_addon.lua /tmp/ffxi-manager-addon-test/
 
 Automated checks cover configuration, identity, maintenance policies, IPC authentication/session binding, UI behavior and credential handling. Complete successful Windows login records account/profile/build validation; unattended recovery and scheduled downtime depend on that proof. Recognized login errors stop automation. The latest shutdown cancellation and early-input recovery changes still need live verification. Linux/SteamDeck launch automation and reliable extraction of saved POL account identities remain planned.
 
+If POL closes before its login screen, run this from the repository in Windows PowerShell, then try the usual launch during the 60-second observation:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\windows-crash-report.ps1
+```
+
+The JSON report under `%LOCALAPPDATA%\FFXILauncher\diagnostics` includes recent matching Windows Application Error, Windows Error Reporting, .NET Runtime exception and hang events, configured executable versions, local graphics-wrapper versions/hashes, and process/window observations. It also lists existing crash dump files without reading them. Use `-WatchSeconds 0` to collect only the current process snapshot and recent events. The script does not launch or change POL, collect credentials, or take screenshots. Paths and Windows event fields can contain local user information. No matching event does not rule out a crash; collection failures are listed separately. See [Windows troubleshooting](docs/WINDOWS-TROUBLESHOOTING.md) for the existing single-account test workflow and the graphics-wrapper investigation.
+
 Artwork and icon provenance is listed in `src/FFXILauncher.Desktop/Assets/Themes/SOURCES.md` and `Assets/Weather/SOURCES.md`. See [implementation details](docs/IMPLEMENTATION.md) for architecture and remaining work.
 
 ## License and distribution

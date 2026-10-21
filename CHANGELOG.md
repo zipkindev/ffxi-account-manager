@@ -1,5 +1,9 @@
 # Release notes
 
+## 1.0.23
+
+- Keep the launcher running when the official maintenance feed returns a maintenance placeholder or unrecognized page. Show the unavailable status and retain cached schedules and their original check time.
+
 ## 1.0.22
 
 - In-game maintenance warnings appear once per world/message in Server maintenance; character cards show only their applicable official schedule.

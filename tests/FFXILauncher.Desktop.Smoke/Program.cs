@@ -14,6 +14,8 @@ using FFXILauncher.Core;
 using FFXILauncher.Desktop;
 
 if (args.Contains("--pol-sizing-test")) { NativePolSizing.Run(); return; }
+MaintenanceMonitorRegression.Run();
+if (args.Contains("--maintenance-regression")) return;
 
 if (args is ["--game-window-ready", var processId, var startedTicks, var executable])
 {
