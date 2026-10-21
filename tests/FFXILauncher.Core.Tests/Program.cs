@@ -333,6 +333,17 @@ Check(MaintenanceSchedule.ShutdownDue(scheduled with { World = "" }, fresh, main
 Check(MaintenanceSchedule.ShutdownDue(scheduled, fresh with { CheckedUtc = maintenanceStart.AddHours(-1) }, maintenanceStart) == null, "stale notices cannot trigger shutdown");
 Check(!RecoveryPolicy.Evaluate(scheduled, false, fresh, maintenanceStart.AddMinutes(-4)).Allowed, "scheduled downtime prevents premature reconnect before start");
 Check(!RecoveryPolicy.Evaluate(scheduled, false, fresh with { ReviewRequired = ["Unparsed notice"] }, maintenanceEnd.AddMinutes(3)).Allowed, "unparsed maintenance notice requires review before reconnect");
+var unavailableNotices = new MaintenanceSnapshot([], null, ["Unparsed historical notice"]);
+Check(RecoveryPolicy.Evaluate(scheduled, false, unavailableNotices, maintenanceStart, userInitiated: true).Allowed,
+    "requested login proceeds when official notices are unavailable or unreadable");
+Check(!RecoveryPolicy.Evaluate(scheduled, false, unavailableNotices, maintenanceStart).Allowed,
+    "unavailable notices still block unattended recovery");
+Check(!RecoveryPolicy.Evaluate(scheduled, false, fresh with { CheckedUtc = null }, maintenanceStart, userInitiated: true).Allowed,
+    "requested login still respects a known active maintenance window with an unavailable feed");
+Check(!RecoveryPolicy.Evaluate(scheduled, false, fresh, maintenanceStart.AddMinutes(-4), userInitiated: true).Allowed,
+    "requested login respects the configured maintenance shutdown lead time");
+Check(!RecoveryPolicy.Evaluate(scheduled, true, unavailableNotices, maintenanceStart, userInitiated: true).Allowed,
+    "requested login policy cannot itself clear an intentional stop");
 Console.WriteLine($"{passed} final checks passed.");
 
 var legacyCredentials = System.Text.Json.JsonSerializer.Deserialize<AccountCredentials>("{\"PolPassword\":\"synthetic-pol\",\"SquareEnixPassword\":\"synthetic-se\"}");

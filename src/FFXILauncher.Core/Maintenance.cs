@@ -38,12 +38,14 @@ public static class MaintenanceSchedule
 
 public static class RecoveryPolicy
 {
-    public static RecoveryDecision Evaluate(AccountConfiguration account, bool intentionallyStopped, MaintenanceSnapshot snapshot, DateTimeOffset now)
+    public static RecoveryDecision Evaluate(AccountConfiguration account, bool intentionallyStopped, MaintenanceSnapshot snapshot, DateTimeOffset now, bool userInitiated = false)
     {
         var decision = Evaluate(account, intentionallyStopped, snapshot.Windows, now);
-        if (!decision.Allowed) return decision;
-        if (snapshot.ReviewRequired?.Count > 0) return new(false, "Official maintenance notice needs time-format review");
-        if (snapshot.CheckedUtc == null || now - snapshot.CheckedUtc > TimeSpan.FromMinutes(15)) return new(false, "Waiting for a fresh official maintenance check");
+        // A requested login may proceed without a fresh notice feed. Known
+        // maintenance windows still apply; unattended recovery needs verification.
+        if (!decision.Allowed || userInitiated) return decision;
+        if (snapshot.ReviewRequired?.Count > 0) return new(false, "Automatic reconnect paused: maintenance times could not be confirmed.");
+        if (snapshot.CheckedUtc == null || now - snapshot.CheckedUtc > TimeSpan.FromMinutes(15)) return new(false, "Automatic reconnect paused: maintenance notices could not be checked.");
         return decision;
     }
     public static RecoveryDecision Evaluate(AccountConfiguration account, bool intentionallyStopped, IEnumerable<MaintenanceWindow> windows, DateTimeOffset now)

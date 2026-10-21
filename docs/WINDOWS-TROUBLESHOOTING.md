@@ -26,6 +26,14 @@ Version 1.0.23 handles unavailable/malformed notice responses, retains the previ
 
 The repaired Windows package passed its payload verification, the maintenance regression and the full Windows dashboard/credential smoke suite. Core contracts and Linux dashboard smoke checks also passed. After installation through the normal unattended setup, version 1.0.23 was responsive with no new launcher crash events in the initial observation; all three existing POL processes retained their recorded creation times and responded. The user also confirmed that the launcher worked again. This validates the observed feed failure path, rather than every possible launcher crash.
 
+### Requested login and idle controls
+
+Version 1.0.24 distinguishes an explicit Launch profile/Start auto logins request from unattended recovery. An unavailable feed or unreadable notice no longer prevents a requested login. Known applicable maintenance windows, the configured shutdown lead time, session identity checks and credential/input safeguards still apply. Unattended recovery still requires a current, readable maintenance check; existing in-game warning holds are retained.
+
+An idle account displays `No process tracked`. Graceful shutdown and Force close are disabled without a detected running process and refreshed on subsequent process observations. Force close remains available for a tracked startup process without a usable window; graceful shutdown requires a window. A maintenance-related refused launch is explained in Activity rather than replacing the idle process status with internal parser terminology.
+
+Version 1.0.25 adds a shared three-attempt focus-recovery budget for initial focus and screen capture. Every focus operation revalidates the original PID, creation time and configured executable. Recovery rereads the screen and resumes the same engine state; it does not restart the login, retype a password or replay a failed input action. Loss of focus during an input action still stops that attempt. Cancellation, process replacement and a depleted recovery budget stop recovery. The earlier 1.0.24 UI trial confirmed that Launch profile opened POL, while its login stopped at the existing foreground guard; learned caches remained present.
+
 ## October 21, 2026 graphics-wrapper investigation
 
 Windows reported 14 POL Application Error events in the observed 24-hour window for local dgVoodoo 2.87.3 `DDRAW.dll`, exception `0xc0000005`, offset `0x0004ab0a`. A single manager launch reproduced an unresponsive POL window without credential input. The same time range also contained separate older LuaCore failures; they are not evidence of the same cause.

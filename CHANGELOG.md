@@ -1,5 +1,15 @@
 # Release notes
 
+## 1.0.25
+
+- Recover from brief POL focus loss during startup and screen capture, with three recovery attempts across the login. Each attempt verifies the original process and executable; cancellation stops recovery. Input actions and credential submissions are never replayed by focus recovery.
+
+## 1.0.24
+
+- Requested logins can proceed when the maintenance feed is unavailable or contains unreadable notices. Known maintenance windows and unattended recovery checks still apply.
+- Idle cards show No process tracked; maintenance-related launch holds are explained in Activity.
+- Disable graceful shutdown and force close when no running POL process is tracked, and refresh their availability as process state changes.
+
 ## 1.0.23
 
 - Keep the launcher running when the official maintenance feed returns a maintenance placeholder or unrecognized page. Show the unavailable status and retain cached schedules and their original check time.

@@ -56,14 +56,15 @@ public sealed class MaintenanceMonitor(string directory, HttpMessageHandler? han
             var temporary = CachePath + ".tmp";
             await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(Snapshot), cancellationToken);
             File.Move(temporary, CachePath, true);
-            Status = $"Official notices checked at {DateTime.Now:t}. {review.Count} notice(s) need scope/time-format review.";
+            Status = $"Official notices checked at {DateTime.Now:t}." +
+                (review.Count > 0 ? " Some maintenance times could not be confirmed; automatic reconnect is paused." : "");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         // InvalidDataException does not derive from IOException. In particular,
         // PlayOnline can redirect to a maintenance placeholder with HTTP 200.
         // Keep the previous check time so an unavailable feed cannot look fresh.
         catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or JsonException or TaskCanceledException or UnauthorizedAccessException or RegexMatchTimeoutException or UriFormatException)
-        { Status = "Official notices unavailable; retaining cached windows. " + ex.Message; }
+        { Status = "Official notices unavailable. Showing the last known schedule; automatic reconnect requires a current check."; }
         finally { checking = false; }
     }
     public void Dispose() => client.Dispose();

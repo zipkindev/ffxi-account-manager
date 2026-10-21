@@ -15,6 +15,7 @@ using FFXILauncher.Desktop;
 
 if (args.Contains("--pol-sizing-test")) { NativePolSizing.Run(); return; }
 MaintenanceMonitorRegression.Run();
+FocusRecoveryRegression.Run();
 if (args.Contains("--maintenance-regression")) return;
 
 if (args is ["--game-window-ready", var processId, var startedTicks, var executable])
@@ -316,6 +317,14 @@ File.WriteAllText(Path.Combine(directory, "maintenance.json"), System.Text.Json.
 var configured = new MainWindow(directory, false);
 configured.Show();
 Dispatcher.UIThread.RunJobs();
+foreach (var account in new[] { mainAccount, secondAccount })
+{
+    var key = account.Id.ToString("N");
+    if (configured.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionStatus_" + key).Text != "No process tracked" ||
+        configured.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "Shutdown_" + key).IsEnabled ||
+        configured.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "ForceClose_" + key).IsEnabled)
+        throw new Exception("Idle cards must show No process tracked with both shutdown actions disabled.");
+}
 if (configured.GetLogicalDescendants().OfType<Button>().Any(b => Equals(b.Content, "Validate login")))
     throw new Exception("Obsolete Validate login control is still displayed.");
 if (configured.GetLogicalDescendants().OfType<Button>().Single(b => b.Name == "Launch_" + mainAccount.Id.ToString("N")).Content?.ToString() != "Launch profile")

@@ -506,7 +506,7 @@ public sealed partial class MainWindow : Window
             characterMaintenance[account.Id] = schedule;
             var maintenanceColor = Color.Parse(ThemeCatalog.Resolve(configuration.Theme).Inset);
             body.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(127, maintenanceColor.R, maintenanceColor.G, maintenanceColor.B)), CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 6), Child = schedule });
-            var status = new TextBlock { Text = "Ready to launch · " + (vault.Contains(account.Id) ? "Credentials saved" : "No saved credentials"), Foreground = ThemeCatalog.BrushFor("Accent") };
+            var status = new TextBlock { Name = "SessionStatus_" + account.Id.ToString("N"), Text = "No process tracked", Foreground = ThemeCatalog.BrushFor("Accent") };
             statuses[account.Id] = status;
             body.Children.Add(status);
             var state = new TextBlock { Name = "CharacterState_" + account.Id.ToString("N"), TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Muted") };
@@ -539,7 +539,7 @@ public sealed partial class MainWindow : Window
                     catch (Exception ex) { Log("Could not remove account: " + ex.Message); }
                 }
             };
-            var stop = new Button { Name = "Shutdown_" + account.Id.ToString("N"), Content = "Graceful shutdown", IsEnabled = platform.CanLaunch && !shuttingDown.Contains(account.Id) };
+            var stop = new Button { Name = "Shutdown_" + account.Id.ToString("N"), Content = "Graceful shutdown", IsEnabled = false };
             stop.Click += async (_, _) => { if (shuttingDown.Contains(account.Id)) await CancelShutdownAccount(account.Id); else await ShutdownAccount(account.Id); };
             var lookup = new Button { Content = "FFXIAH", IsEnabled = WorldCatalog.Normalize(account.World) != null };
             lookup.Click += (_, _) =>
@@ -552,7 +552,7 @@ public sealed partial class MainWindow : Window
                 }
                 catch (Exception ex) { Log("Could not open character lookup: " + ex.Message); }
             };
-            var force = new Button { Content = "Force close", IsEnabled = platform.CanLaunch && sessions.TryGetValue(account.Id, out var forceTarget) && platform.Inspect(forceTarget) != SessionHealth.Exited };
+            var force = new Button { Name = "ForceClose_" + account.Id.ToString("N"), Content = "Force close", IsEnabled = false };
             force.Click += async (_, _) => await ForceCloseAccount(account.Id);
             actions.Children.Add(launch); actions.Children.Add(edit); actions.Children.Add(stop); actions.Children.Add(force); actions.Children.Add(lookup); actions.Children.Add(delete);
             foreach (var button in actions.Children.OfType<Button>()) { button.Padding = new Thickness(10, 6); button.Margin = new Thickness(0, 0, 6, 4); button.FontSize = 12; }
@@ -932,7 +932,7 @@ public sealed partial class MainWindow : Window
         UpdateSelectionControls();
         try
         {
-            if (account.AutoLoginEnabled) await RunAutoLogin(account, validate: true);
+            if (account.AutoLoginEnabled) await RunAutoLogin(account, userInitiated: true);
             else await LaunchAccount(id);
         }
         finally { batchLaunching = false; UpdateSelectionControls(); }
@@ -996,11 +996,19 @@ public sealed partial class MainWindow : Window
     {
         RefreshCharacterStates();
         foreach (var button in AccountList.GetLogicalDescendants().OfType<Button>())
-            if (button.Name?.StartsWith("Shutdown_", StringComparison.Ordinal) == true && Guid.TryParseExact(button.Name[9..], "N", out var id))
+        {
+            var graceful = button.Name?.StartsWith("Shutdown_", StringComparison.Ordinal) == true;
+            var force = button.Name?.StartsWith("ForceClose_", StringComparison.Ordinal) == true;
+            if ((!graceful && !force) || !Guid.TryParseExact(button.Name![(graceful ? 9 : 11)..], "N", out var id)) continue;
+            var health = sessions.TryGetValue(id, out var owned) ? platform.Inspect(owned) : SessionHealth.Exited;
+            var running = health is SessionHealth.Responsive or SessionHealth.Unresponsive;
+            if (graceful)
             {
-                button.IsEnabled = platform.CanLaunch && !shutdownCancelling.Contains(id);
+                button.IsEnabled = platform.CanLaunch && !shutdownCancelling.Contains(id) && (running || shuttingDown.Contains(id));
                 button.Content = shutdownCancelling.Contains(id) ? "Cancelling shutdown…" : shuttingDown.Contains(id) ? "Cancel shutdown" : "Graceful shutdown";
             }
+            else button.IsEnabled = platform.CanLaunch && (running || health == SessionHealth.AwaitingLogin) && !forceClosing.Contains(id);
+        }
         CancelShutdownsButton.IsEnabled = shutdownStops.Count > 0;
         foreach (var (id, process) in sessions.ToArray())
         {
@@ -1105,7 +1113,7 @@ public sealed partial class MainWindow : Window
                 if (batchStop.IsCancellationRequested || uncertain.Count > 0) return;
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || !account.AutoLoginEnabled || intentionallyStopped.Contains(id)) continue;
-                var decision = EvaluateRecovery(account with { MaintainConnection = true });
+                var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated: true);
                 if (!decision.Allowed || ManualLoginProblem(account) != null || !vault.Contains(id)) continue;
                 if (!sessions.TryGetValue(id, out var process) || platform.Inspect(process) == SessionHealth.Exited)
                     await LaunchAccount(id, batchStop.Token);
@@ -1114,18 +1122,24 @@ public sealed partial class MainWindow : Window
             {
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || !account.AutoLoginEnabled || batchStop.IsCancellationRequested || intentionallyStopped.Contains(id)) continue;
-                await RunAutoLogin(account, validate: true);
+                await RunAutoLogin(account, userInitiated: true);
                 if (uncertain.Count > 0) break;
             }
         }
         catch (OperationCanceledException) { Log("Automatic login queue cancelled."); }
         finally { autoLoginBatchStop = null; batchLaunching = false; UpdateSelectionControls(); }
     }
-    private async Task RunAutoLogin(AccountConfiguration account, bool validate = false)
+    private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false)
     {
-        var decision = EvaluateRecovery(account with { MaintainConnection = true });
-        if (!decision.Allowed) { statuses[account.Id].Text = decision.Reason + (decision.ResumeUtc is {} resume ? $" until {resume.ToLocalTime():g}" : ""); return; }
-        var readiness = validate ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
+        var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated);
+        if (!decision.Allowed)
+        {
+            Log(account.Label + ": login paused. " + decision.Reason + (decision.ResumeUtc is {} resume ? $" until {MaintenanceTimeDisplay.Instant(resume)}" : ""));
+            if (!sessions.TryGetValue(account.Id, out var existing) || platform.Inspect(existing) == SessionHealth.Exited)
+                statuses[account.Id].Text = "No process tracked";
+            return;
+        }
+        var readiness = userInitiated ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
         if (readiness != null) { statuses[account.Id].Text = readiness; Log(account.Label + ": " + readiness); return; }
         if (!vault.Contains(account.Id)) { statuses[account.Id].Text = "Auto login needs saved credentials"; return; }
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token, autoLoginBatchStop?.Token ?? CancellationToken.None);
@@ -1136,7 +1150,7 @@ public sealed partial class MainWindow : Window
             if (!sessions.TryGetValue(account.Id, out var process) || platform.Inspect(process) == SessionHealth.Exited) await LaunchAccount(account.Id, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             if (intentionallyStopped.Contains(account.Id) || !sessions.TryGetValue(account.Id, out process) || platform.Inspect(process) == SessionHealth.Exited) return;
-            if (validate && autoLogin is WindowsAutoLogin windows)
+            if (userInitiated && autoLogin is WindowsAutoLogin windows)
             {
                 var full = await windows.RequestAsync(account, process, false, cancellation.Token);
                 if (full) WindowsLoginValidation.Record(dataRoot, account);
@@ -1156,9 +1170,9 @@ public sealed partial class MainWindow : Window
     }
     private string? AddonDataDirectory => string.IsNullOrWhiteSpace(configuration.WindowerPath) ? null : Path.Combine(Path.GetDirectoryName(configuration.WindowerPath)!, "addons", "FFXIManager", "data");
     private IReadOnlyList<InGameMaintenanceAlert> GameAlerts(AccountConfiguration account) => AddonDataDirectory is {} data ? InGameMaintenance.Read(data, account.World, DateTimeOffset.UtcNow) : [];
-    private RecoveryDecision EvaluateRecovery(AccountConfiguration account)
+    private RecoveryDecision EvaluateRecovery(AccountConfiguration account, bool userInitiated = false)
     {
-        var decision = RecoveryPolicy.Evaluate(account, intentionallyStopped.Contains(account.Id), maintenance.Snapshot, DateTimeOffset.UtcNow);
+        var decision = RecoveryPolicy.Evaluate(account, intentionallyStopped.Contains(account.Id), maintenance.Snapshot, DateTimeOffset.UtcNow, userInitiated);
         if (intentionallyStopped.Contains(account.Id) || !account.MaintainConnection) return decision;
         return InGameMaintenance.Hold(GameAlerts(account), maintenance.Snapshot, DateTimeOffset.UtcNow) ?? decision;
     }
@@ -1179,6 +1193,7 @@ public sealed partial class MainWindow : Window
     private string RecoveryStatus(Guid id)
     {
         var account = configuration.ConfiguredAccounts.Single(a => a.Id == id);
+        if (!account.MaintainConnection) return "No process tracked";
         var decision = EvaluateRecovery(account);
         if (!decision.Allowed) return decision.Reason + (decision.ResumeUtc is {} resume ? $" · resumes after {MaintenanceTimeDisplay.Instant(resume)}" : "");
         return autoLogin.ReadinessProblem(account) ?? "Process exited · reconnect queued";
@@ -1202,7 +1217,7 @@ public sealed partial class MainWindow : Window
             {
                 rows.Add((alertWindow.World ?? "Global") + ": " + Describe(alertWindow));
                 if (!fresh) rows.Add("Cached schedule · refresh required");
-                if (snapshot.ReviewRequired?.Count > 0) rows.Add("Notice(s) need review; schedule may be incomplete.");
+                if (snapshot.ReviewRequired?.Count > 0) rows.Add("Some maintenance times could not be confirmed.");
             }
             ToolTip.SetTip(display, alertWindow == null ? null : "Official notice: " + alertWindow.Title + "\n" + alertWindow.Source);
             display.Text = string.Join("\n", rows);

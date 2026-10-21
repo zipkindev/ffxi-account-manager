@@ -7,6 +7,12 @@ namespace FFXILauncher.Desktop.Platform;
 internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration config, AccountConfiguration account, ManagedProcess process, Action<string> report)
 {
     private readonly WindowsLoginWindow window = new(process, config.PolPath);
+    private readonly LoginFocusRecovery focusRecovery = new(() =>
+    {
+        var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+        try { new WindowsLoginWindow(process, config.PolPath).Focus(); }
+        finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+    }, report);
     private readonly string framePath = Path.Combine(directory, "frame.bmp");
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
     private bool identityVerified, passwordEntered, editorOpened, selectedCharacterVerified, characterConfirmed, returnedForIdentity, worldVerified;
@@ -35,12 +41,15 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             cancellation.ThrowIfCancellationRequested();
             var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
             var captured = false;
+            var lostFocus = false;
             try { window.Capture(framePath); gameFrame = window.IsGameWindow; captured = true; }
+            catch (LoginFocusException) { lostFocus = true; }
             catch (LoginObscuredException) when (DateTimeOffset.UtcNow < captureUntil) { }
             finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
             if (captured) break;
-            // A transient overlay is a wait state. Never send keys through it
-            // or reclaim focus from another application.
+            if (lostFocus) await focusRecovery.RecoverAsync(cancellation);
+            // Retry capture after a brief overlay or bounded focus recovery.
+            // Input actions remain outside this retry loop.
             await Task.Delay(100, cancellation);
         }
         var captureMs = clock.ElapsedMilliseconds;
@@ -218,10 +227,10 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             throw new LoginSafetyException("Configure the installed Windower.exe and pol.exe before calibration.");
         report("Waiting for the owned POL window to open…");
         await window.WaitForWindowAsync(cancellation);
+        await focusRecovery.FocusAsync(cancellation);
         var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
         try
         {
-            window.Focus();
             if (!inspectOnly && config.NormalizePolWindow) window.NormalizePolClient();
             if (!inspectOnly && window.IsGameWindow) window.ParkCursor();
         }
