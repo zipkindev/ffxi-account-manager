@@ -38,6 +38,11 @@ public sealed partial class MainWindow : Window
     private bool recoveryChecking;
     private readonly Dictionary<Guid, MaintenanceWindow> maintenanceRestarts = [];
     private readonly Dictionary<Guid, DateTimeOffset> nextMaintenanceInspection = [];
+    private readonly Dictionary<ManagedProcess, DateTimeOffset> nextConnectionInspection = [];
+    private readonly Dictionary<ManagedProcess, DateTimeOffset> unresponsiveSince = [];
+    private readonly HashSet<Guid> disconnectRestarts = [];
+    private readonly HashSet<Guid> connectionChecks = [];
+    private readonly Dictionary<Guid, string> connectionStates = [];
     private readonly HashSet<string> scheduledShutdowns = [];
     private LauncherConfiguration configuration = new();
     private readonly Dictionary<Guid, ManagedProcess> sessions = [];
@@ -488,6 +493,7 @@ public sealed partial class MainWindow : Window
                     autoToggle.IsChecked = auto;
                     maintainToggle.IsChecked = maintain;
                     if (!auto) { intentionallyStopped.Add(account.Id); if (accountCancellation.TryGetValue(account.Id, out var cancellation)) cancellation.Cancel(); }
+                    else if (!maintain && connectionChecks.Contains(account.Id) && accountCancellation.TryGetValue(account.Id, out var recoveryStop)) recoveryStop.Cancel();
                     Log(account.Label + (auto ? (maintain ? ": auto login and maintenance enabled." : ": auto login enabled; no automatic reconnect.") : ": auto login and maintenance disabled; game stays open."));
                 }
                 catch (Exception ex)
@@ -767,7 +773,7 @@ public sealed partial class MainWindow : Window
             {
                 RememberSession(id, process);
                 if (!memberSectionOnly && trainingSection == "") intentionallyStopped.Remove(id);
-                if (full) WindowsLoginValidation.Record(dataRoot, account);
+                if (full) { WindowsLoginValidation.Record(dataRoot, account); disconnectRestarts.Remove(account.Id); connectionStates.Remove(account.Id); }
             }
             return new(true, inspect ? "Verified POL client captured." : memberSectionOnly || trainingSection != "" ? login.LastSectionResult ?? "Section completed without a full login proof." : full ? "Complete login verified; automatic login enabled for this account." : "Character is already online. Start from the POL member list to validate the complete login flow.", full);
         }
@@ -1014,6 +1020,8 @@ public sealed partial class MainWindow : Window
         {
             if (!statuses.TryGetValue(id, out var status) || pending.Contains(id) || accountCancellation.ContainsKey(id)) continue;
             var health = platform.Inspect(process);
+            if (health != SessionHealth.Exited && connectionStates.TryGetValue(id, out var connectionState))
+            { status.Text = $"PID {process.Pid} · {connectionState}"; continue; }
             if (health != SessionHealth.Exited && shutdownProgress.TryGetValue(id, out var progress)) { status.Text = $"PID {process.Pid} · {progress}"; continue; }
             status.Text = health switch
             {
@@ -1129,7 +1137,7 @@ public sealed partial class MainWindow : Window
         catch (OperationCanceledException) { Log("Automatic login queue cancelled."); }
         finally { autoLoginBatchStop = null; batchLaunching = false; UpdateSelectionControls(); }
     }
-    private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false)
+    private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false, bool validateRecovery = false)
     {
         var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated);
         if (!decision.Allowed)
@@ -1139,7 +1147,8 @@ public sealed partial class MainWindow : Window
                 statuses[account.Id].Text = "No process tracked";
             return;
         }
-        var readiness = userInitiated ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
+        var validate = userInitiated || validateRecovery && account.MaintainConnection && WindowsLoginValidation.HasPriorValidation(dataRoot, account);
+        var readiness = validate ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
         if (readiness != null) { statuses[account.Id].Text = readiness; Log(account.Label + ": " + readiness); return; }
         if (!vault.Contains(account.Id)) { statuses[account.Id].Text = "Auto login needs saved credentials"; return; }
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token, autoLoginBatchStop?.Token ?? CancellationToken.None);
@@ -1150,10 +1159,10 @@ public sealed partial class MainWindow : Window
             if (!sessions.TryGetValue(account.Id, out var process) || platform.Inspect(process) == SessionHealth.Exited) await LaunchAccount(account.Id, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             if (intentionallyStopped.Contains(account.Id) || !sessions.TryGetValue(account.Id, out process) || platform.Inspect(process) == SessionHealth.Exited) return;
-            if (userInitiated && autoLogin is WindowsAutoLogin windows)
+            if (validate && autoLogin is WindowsAutoLogin windows)
             {
                 var full = await windows.RequestAsync(account, process, false, cancellation.Token);
-                if (full) WindowsLoginValidation.Record(dataRoot, account);
+                if (full) { WindowsLoginValidation.Record(dataRoot, account); disconnectRestarts.Remove(account.Id); connectionStates.Remove(account.Id); }
                 else Log(account.Label + ": existing login verified; complete startup validation still required for unattended recovery.");
             }
             else await autoLogin.LoginAsync(account, process, vault, cancellation.Token);
@@ -1196,7 +1205,9 @@ public sealed partial class MainWindow : Window
         if (!account.MaintainConnection) return "No process tracked";
         var decision = EvaluateRecovery(account);
         if (!decision.Allowed) return decision.Reason + (decision.ResumeUtc is {} resume ? $" · resumes after {MaintenanceTimeDisplay.Instant(resume)}" : "");
-        return autoLogin.ReadinessProblem(account) ?? "Process exited · reconnect queued";
+        var readiness = disconnectRestarts.Contains(id) && WindowsLoginValidation.HasPriorValidation(dataRoot, account)
+            ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
+        return readiness ?? "Process exited · reconnect queued";
     }
     private void RefreshCharacterMaintenance()
     {
@@ -1279,6 +1290,13 @@ public sealed partial class MainWindow : Window
                 }
             }
             if (LoginOperationActive || uncertain.Count > 0) return;
+            foreach (var (id, process) in sessions.ToArray())
+            {
+                var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
+                if (account == null || !account.MaintainConnection || intentionallyStopped.Contains(id) || shuttingDown.Contains(id)) continue;
+                if (await RecoverRunningConnection(account, process)) break;
+            }
+            if (LoginOperationActive) return;
             var restartIds = maintenanceRestarts.Where(pair => DateTimeOffset.UtcNow >= pair.Value.EndUtc &&
                 !intentionallyStopped.Contains(pair.Key) && sessions.TryGetValue(pair.Key, out var owned) && platform.Inspect(owned) == SessionHealth.Exited &&
                 configuration.ConfiguredAccounts.Any(a => a.Id == pair.Key && a.AutoLoginEnabled && a.MaintainConnection &&
@@ -1287,16 +1305,109 @@ public sealed partial class MainWindow : Window
             foreach (var (id, process) in sessions.ToArray())
             {
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
-                if (account == null || platform.Inspect(process) != SessionHealth.Exited || autoLogin.ReadinessProblem(account) != null || shuttingDown.Contains(id)) continue;
+                if (account == null || platform.Inspect(process) != SessionHealth.Exited || shuttingDown.Contains(id)) continue;
+                var validateRecovery = disconnectRestarts.Contains(id) && WindowsLoginValidation.HasPriorValidation(dataRoot, account);
+                if ((validateRecovery ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account)) != null) continue;
                 if (!EvaluateRecovery(account).Allowed) continue;
                 if (nextRetry.TryGetValue(id, out var retry) && DateTimeOffset.UtcNow < retry) continue;
                 nextRetry[id] = DateTimeOffset.UtcNow.AddSeconds(15 + Random.Shared.Next(15));
-                await RunAutoLogin(account);
+                await RunAutoLogin(account, validateRecovery: validateRecovery);
                 break;
             }
         }
         finally { recoveryChecking = false; }
     }
+    private async Task<bool> RecoverRunningConnection(AccountConfiguration account, ManagedProcess process)
+    {
+        if (autoLogin is not WindowsAutoLogin windows || windows.SetupProblem(account) != null || AddonDataDirectory is not {} data) return false;
+        var now = DateTimeOffset.UtcNow;
+        if (nextRetry.TryGetValue(account.Id, out var retryAfter) && now < retryAfter) return false;
+        var health = platform.Inspect(process);
+        if (health is not (SessionHealth.Responsive or SessionHealth.Unresponsive)) return false;
+        var heartbeat = new ShutdownIpc(data).ReadSession(account, now);
+        if (heartbeat != null && heartbeat.RegisteredUtc < process.StartedUtc.AddSeconds(-2)) heartbeat = null;
+        var recentTraffic = ServerTraffic.IsRecent(data, account, heartbeat, now);
+        if (recentTraffic) connectionStates.Remove(account.Id);
+        if (health == SessionHealth.Unresponsive && heartbeat == null && !recentTraffic) unresponsiveSince.TryAdd(process, now);
+        else unresponsiveSince.Remove(process);
+        var hung = DisconnectRecovery.CanCloseHung(account, intentionallyStopped.Contains(account.Id), health,
+            unresponsiveSince.TryGetValue(process, out var since) ? since : null, now, heartbeat != null, recentTraffic);
+        if (!hung && (health != SessionHealth.Responsive || recentTraffic ||
+            nextConnectionInspection.TryGetValue(process, out var next) && now < next)) return false;
+        nextConnectionInspection[process] = now.AddSeconds(60);
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
+        cancellation.CancelAfter(TimeSpan.FromMinutes(7));
+        accountCancellation[account.Id] = cancellation;
+        connectionChecks.Add(account.Id);
+        UpdateSelectionControls();
+        try
+        {
+            if (!hung)
+            {
+                await windows.RequestAsync(account, process, true, cancellation.Token);
+                var code = windows.LastInspectionErrorCode;
+                var latest = configuration.ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
+                if (latest == null || !DisconnectRecovery.CanRestart(latest, intentionallyStopped.Contains(account.Id), windows.LastInspectionCredentialRejected, code) ||
+                    !sessions.TryGetValue(account.Id, out var tracked) || tracked != process) return false;
+                connectionStates[account.Id] = "Disconnected (" + code + ") · reconnecting…";
+                // A fresh render heartbeat does not override two matching DC-error reads.
+                // Recent server packets do: never interrupt an active connection.
+                if (ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow)) return false;
+                if (!EvaluateRecovery(account).Allowed)
+                {
+                    connectionStates[account.Id] = "Disconnected (" + code + ") · " + EvaluateRecovery(account).Reason;
+                    Log(account.Label + ": disconnected (" + code + "). " + EvaluateRecovery(account).Reason);
+                    return false;
+                }
+                Log(account.Label + ": disconnected (" + code + "); trying the existing character-selection login.");
+                try { await windows.RequestAsync(account, process, false, cancellation.Token, recoverDisconnect: true); }
+                catch (Exception ex) when (ex is not OperationCanceledException && platform.Inspect(process) == SessionHealth.Exited)
+                {
+                    // Acknowledging POL-0250 can close POL itself. The verified
+                    // disconnect still needs a fresh login when the old build's
+                    // proof cannot authorize an ordinary exited-process retry.
+                    Log(account.Label + ": disconnected POL process exited while returning to login.");
+                }
+                if (windows.LastConnectionRecovered)
+                {
+                    connectionStates.Remove(account.Id);
+                    Log(account.Label + ": connection restored; character and world verified online.");
+                    return true;
+                }
+                if (!windows.LastRecoveryNeedsRestart && platform.Inspect(process) != SessionHealth.Exited) return false;
+                if (windows.LastInspectionCredentialRejected)
+                {
+                    intentionallyStopped.Add(account.Id);
+                    Log(account.Label + ": login credentials were rejected; automatic restart paused.");
+                    return true;
+                }
+            }
+            cancellation.Token.ThrowIfCancellationRequested();
+            var current = configuration.ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
+            if (current == null || !current.MaintainConnection || intentionallyStopped.Contains(account.Id) ||
+                !sessions.TryGetValue(account.Id, out var owned) || owned != process ||
+                !EvaluateRecovery(current).Allowed || windows.SetupProblem(current) != null ||
+                !WindowsLoginValidation.HasPriorValidation(dataRoot, current)) return false;
+            if (ServerTraffic.IsRecent(data, current, new ShutdownIpc(data).ReadSession(current, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow)) return false;
+            var alreadyExited = platform.Inspect(process) == SessionHealth.Exited;
+            if (!alreadyExited) await WindowsProcessCleanup.TerminateAsync(process, configuration.PolPath, cancellation.Token);
+            connectionStates.Remove(account.Id);
+            disconnectRestarts.Add(account.Id);
+            nextRetry[account.Id] = DateTimeOffset.UtcNow.AddSeconds(15 + Random.Shared.Next(15));
+            Log(account.Label + (alreadyExited ? ": disconnected process exited. Fresh login queued." : hung ? ": not responding for 90 seconds; closed the tracked process. Restart queued." : ": another error prevented reconnection; closed the tracked process. Fresh login queued."));
+            return true;
+        }
+        catch (OperationCanceledException) { return false; }
+        catch (Exception ex)
+        {
+            nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(2);
+            if (connectionStates.ContainsKey(account.Id)) connectionStates[account.Id] = "Disconnected · recovery paused: " + ex.Message;
+            Log(account.Label + ": connection recovery paused. " + ex.Message);
+            return false;
+        }
+        finally { connectionChecks.Remove(account.Id); accountCancellation.Remove(account.Id); UpdateSelectionControls(); }
+    }
+
     private async Task CleanupMaintenanceError(AccountConfiguration account, ManagedProcess process)
     {
         if (autoLogin is not WindowsAutoLogin windows || windows.SetupProblem(account) != null || AddonDataDirectory is not {} data) return;

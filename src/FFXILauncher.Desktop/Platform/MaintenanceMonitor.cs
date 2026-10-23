@@ -37,7 +37,7 @@ public sealed class MaintenanceMonitor(string directory, HttpMessageHandler? han
                 if (uri.Host != listUri.Host || uri.Scheme != "https") continue;
                 var title = MaintenanceNoticeParser.PlainText(link.Groups["title"].Value).Trim();
                 if (!title.Contains("Maintenance", StringComparison.OrdinalIgnoreCase) && !title.Contains("PlayOnline", StringComparison.OrdinalIgnoreCase)) continue;
-                if (title.Contains("World Transfer", StringComparison.OrdinalIgnoreCase) || title.Contains("Forum", StringComparison.OrdinalIgnoreCase) || title.Contains("Website", StringComparison.OrdinalIgnoreCase)) continue;
+                if (title.Contains("World Transfer", StringComparison.OrdinalIgnoreCase) || title.Contains("Forum", StringComparison.OrdinalIgnoreCase) || title.Contains("Website", StringComparison.OrdinalIgnoreCase) || title.Contains("Support Center", StringComparison.OrdinalIgnoreCase)) continue;
                 var notice = await client.GetStringAsync(uri, cancellationToken);
                 var text = MaintenanceNoticeParser.PlainText(notice);
                 var affected = Regex.Match(text, @"\[Affected Worlds?\](?<scope>.*?)(?:\[|$)", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)).Groups["scope"].Value;

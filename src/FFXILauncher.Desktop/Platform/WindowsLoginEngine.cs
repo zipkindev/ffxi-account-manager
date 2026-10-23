@@ -18,6 +18,10 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
     private bool identityVerified, passwordEntered, editorOpened, selectedCharacterVerified, characterConfirmed, returnedForIdentity, worldVerified;
     public LoginCheckpoint? InspectedCheckpoint { get; private set; }
     public bool InspectedCredentialRejection { get; private set; }
+    public string? InspectedErrorCode { get; private set; }
+    private bool recoveringDisconnect;
+    public bool NeedsFreshRestart { get; private set; }
+    public bool ConnectionRecovered => recoveringDisconnect && worldVerified;
     public bool FullFlowValidated => identityVerified && passwordEntered && selectedCharacterVerified && characterConfirmed && worldVerified;
     internal string? MemberSectionResult { get; private set; }
     private int characterConfirmAttempts;
@@ -42,7 +46,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
             var captured = false;
             var lostFocus = false;
-            try { window.Capture(framePath); gameFrame = window.IsGameWindow; captured = true; }
+            try { window.Capture(framePath); gameFrame = window.IsGameWindow || window.IsCharacterWindow(account.Character); captured = true; }
             catch (LoginFocusException) { lostFocus = true; }
             catch (LoginObscuredException) when (DateTimeOffset.UtcNow < captureUntil) { }
             finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
@@ -113,8 +117,9 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
         var y = (line.Words.Min(w => w.Y) + line.Words.Max(w => w.Y + w.Height)) / 2;
         window.Click(x, y, frame.Width, frame.Height, pressMilliseconds);
     }
-    public async Task RunAsync(ICredentialVault vault, bool inspectOnly, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0)
+    public async Task RunAsync(ICredentialVault vault, bool inspectOnly, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0, bool recoverDisconnect = false)
     {
+        recoveringDisconnect = recoverDisconnect;
         try { await RunCoreAsync(vault, inspectOnly, cancellation, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs); }
         finally
         {
@@ -244,12 +249,19 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 // Cleanup needs the same actual POL/FFXI code twice, away
                 // from the chat footer; generic Error text is not sufficient.
                 var firstCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
+                await Task.Delay(500, cancellation);
                 inspected = await ReadFrame(cancellation);
                 var secondCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
                 InspectedCheckpoint = firstCode != null && firstCode == secondCode ? LoginCheckpoint.Error : LoginCheckpoint.Unknown;
+                InspectedErrorCode = InspectedCheckpoint == LoginCheckpoint.Error ? firstCode : null;
                 InspectedCredentialRejection = InspectedCheckpoint == LoginCheckpoint.Error && LoginCheckpoints.IsCredentialRejection(inspected);
             }
             report("Calibration capture saved."); return;
+        }
+        if (recoveringDisconnect)
+        {
+            if (!await AcknowledgeDisconnectAsync(cancellation)) return;
+            trainingSection = "continue";
         }
         if (trainingSection == "return")
         {
@@ -268,7 +280,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 // A stopped older checkpoint may already be in FFXI. Resume
                 // only reversible game menus; never infer POL account proof.
                 var resumed = await ReadFrame(cancellation);
-                if (trainingSection == "play" || !window.IsGameWindow ||
+                if (trainingSection == "play" || !(window.IsGameWindow || window.IsCharacterWindow(account.Character)) ||
                     (LoginCheckpoints.Recognize(resumed) is not (LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation) &&
                      !LoginCheckpoints.CanOpenDefaultCharacterConfirmation(resumed) && !LoginCheckpoints.CanOpenCharacterList(resumed) &&
                      !(trainingSection == "character" && LoginCheckpoints.ConfirmationCancelPoint(resumed, account.Character) != null)))
@@ -373,7 +385,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             while (DateTimeOffset.UtcNow < deadline)
             {
                 cancellation.ThrowIfCancellationRequested();
-                var session = memberSectionOnly || trainingSection is "password" or "play" ? null : ipc.DiscoverCharacter(account.Character, new DateTimeOffset(process.StartedUtc), DateTimeOffset.UtcNow);
+                var session = memberSectionOnly || trainingSection is "password" or "play" || recoveringDisconnect && !characterConfirmed ? null : ipc.DiscoverCharacter(account.Character, new DateTimeOffset(process.StartedUtc), DateTimeOffset.UtcNow);
                 if (session != null && session.RegisteredUtc >= new DateTimeOffset(process.StartedUtc).AddSeconds(-2))
                 {
                     using var p = Process.GetProcessById(process.Pid);
@@ -382,6 +394,27 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                         if (!session.World.Equals(account.World, StringComparison.OrdinalIgnoreCase)) throw new LoginSafetyException($"The addon reports {account.Character} on {session.World}; configured world is {account.World}. Correct the account mapping before retrying.");
                         if (worldObservation != null && ShutdownIpc.HasAdvanced(worldObservation, session))
                         {
+                            if (recoveringDisconnect)
+                            {
+                                var evidence = await ReadFrame(cancellation);
+                                var error = LoginCheckpoints.MaintenanceErrorCode(evidence);
+                                if (error != null)
+                                {
+                                    await Task.Delay(500, cancellation);
+                                    var confirmed = await ReadFrame(cancellation);
+                                    if (error == LoginCheckpoints.MaintenanceErrorCode(confirmed))
+                                    {
+                                        InspectedErrorCode = error;
+                                        InspectedCredentialRejection = LoginCheckpoints.IsCredentialRejection(confirmed);
+                                        NeedsFreshRestart = true;
+                                        return;
+                                    }
+                                    continue;
+                                }
+                                if (LoginCheckpoints.Recognize(evidence) != LoginCheckpoint.Unknown ||
+                                    LoginCheckpoints.CanOpenCharacterList(evidence) || LoginCheckpoints.CanOpenDefaultCharacterConfirmation(evidence))
+                                { await Task.Delay(200, cancellation); continue; }
+                            }
                             worldVerified = true;
                             selectedCharacterVerified = true; characterConfirmed = true;
                             if (FullFlowValidated)
@@ -680,10 +713,28 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     await Task.Delay(characterConfirmAttempts > 0 || window.IsGameWindow ? 50 : 150, cancellation); continue;
                 }
                 unknownSince = DateTimeOffset.UtcNow;
+                if (recoveringDisconnect && stage is LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor or LoginCheckpoint.Home or LoginCheckpoint.Play)
+                {
+                    NeedsFreshRestart = true;
+                    return; // No POL credentials are entered during in-place recovery.
+                }
                 if (confirmationRecoveryUsed && !characterConfirmed && stage is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
                     timing.InvalidateReplayPath();
                 if (stage == LoginCheckpoint.Error)
                 {
+                    if (recoveringDisconnect)
+                    {
+                        var first = LoginCheckpoints.MaintenanceErrorCode(frame);
+                        await Task.Delay(500, cancellation);
+                        var second = await ReadFrame(cancellation);
+                        if (first != null && first == LoginCheckpoints.MaintenanceErrorCode(second))
+                        {
+                            InspectedErrorCode = first;
+                            InspectedCredentialRejection = LoginCheckpoints.IsCredentialRejection(second);
+                            NeedsFreshRestart = true;
+                            return;
+                        }
+                    }
                     var rejected = passwordEntered && LoginCheckpoints.IsCredentialRejection(frame);
                     LogPolPathEvent(rejected ? "CredentialRejected" : "PolError", stage);
                     throw new LoginSafetyException(rejected ? "Could not validate user name or password. Please check." : "POL reported a login error. Automatic retries are paused.");
@@ -970,6 +1021,47 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
             }
             if (File.Exists(framePath)) File.Delete(framePath);
         }
+    }
+
+    private async Task<bool> AcknowledgeDisconnectAsync(CancellationToken cancellation)
+    {
+        var first = await ReadFrame(cancellation);
+        var code = LoginCheckpoints.DisconnectDialogCode(first);
+        await Task.Delay(500, cancellation);
+        var current = await ReadFrame(cancellation);
+        if (!DisconnectRecovery.IsDisconnectCode(code) || code != LoginCheckpoints.DisconnectDialogCode(current))
+            throw new LoginSafetyException("The disconnect dialog changed; no button was pressed.");
+        report("Disconnected (" + code + "). Dismissing the dialog to return to character selection…");
+        cancellation.ThrowIfCancellationRequested();
+        var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+        try
+        {
+            if (current.UniqueLine("OK") != null) Click(current, "OK");
+            else window.ConfirmGameSelection(); // The twice-confirmed DC dialog has a default OK action.
+        }
+        finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+        var until = DateTimeOffset.UtcNow.AddSeconds(25);
+        while (DateTimeOffset.UtcNow < until)
+        {
+            await Task.Delay(500, cancellation);
+            current = await ReadFrame(cancellation);
+            var nextCode = LoginCheckpoints.MaintenanceErrorCode(current);
+            if (nextCode != null)
+            {
+                await Task.Delay(500, cancellation);
+                var confirmed = await ReadFrame(cancellation);
+                if (DisconnectRecovery.Followup(nextCode, LoginCheckpoints.MaintenanceErrorCode(confirmed), LoginCheckpoints.Recognize(confirmed)) == DisconnectFollowup.FreshRestart)
+                {
+                    InspectedErrorCode = nextCode;
+                    InspectedCredentialRejection = LoginCheckpoints.IsCredentialRejection(confirmed);
+                    NeedsFreshRestart = true;
+                    return false;
+                }
+            }
+            if (LoginCheckpoints.Recognize(current) is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation ||
+                LoginCheckpoints.CanOpenCharacterList(current) || LoginCheckpoints.CanOpenDefaultCharacterConfirmation(current)) return true;
+        }
+        throw new LoginSafetyException("The disconnect dialog did not return to a recognized menu; recovery paused.");
     }
 
     private async Task ReturnToMemberListAsync(LoginFrame frame, CancellationToken cancellation)

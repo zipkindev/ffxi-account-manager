@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.26
+
+- Maintain connection checks running POL sessions for confirmed POL-0250 and FFXI-4001/4002 disconnect dialogs. It dismisses the first dialog and tries the existing character-selection route; a further confirmed error closes only that tracked process and queues a fresh login.
+- Track real incoming server traffic separately from addon rendering heartbeats. Healthy connections avoid repeated screen checks; a stale heartbeat alone never authorizes force close. A nonresponding process requires 90 seconds without heartbeat or server activity before timeout cleanup.
+- Preserve maintenance holds, cancellation, exact process identity and credential-rejection stops. A previously validated account mapping can complete fresh login validation after an app update only as part of confirmed disconnect recovery.
+- Support-center-only maintenance notices no longer block game reconnection.
+
 ## 1.0.25
 
 - Recover from brief POL focus loss during startup and screen capture, with three recovery attempts across the login. Each attempt verifies the original process and executable; cancellation stops recovery. Input actions and credential submissions are never replayed by focus recovery.

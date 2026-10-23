@@ -256,13 +256,27 @@ public static class LoginCheckpoints
         if (Recognize(frame) != LoginCheckpoint.Error) return null;
         foreach (var line in frame.Lines)
         {
-            var code = Regex.Match(line.Text, @"\b(POL|FFXI)[\s:-]*(\d{4})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            // Windows OCR reads the game's capital I as a lowercase l at
+            // common resolutions. Normalize only that prefix glyph; the
+            // four error digits and dialog-region checks remain exact.
+            var code = Regex.Match(line.Text, @"\b(POL|FFX[Il])[\s:-]*(\d{4})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!code.Success || line.Words.Length == 0 || line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) ||
                 !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0 ||
                 w.X < 0 || w.X + w.Width > frame.Width || w.Y < frame.Height * .1 || w.Y + w.Height > frame.Height * .75)) continue;
-            return code.Groups[1].Value.ToUpperInvariant() + "-" + code.Groups[2].Value;
+            return (code.Groups[1].Value.StartsWith("FFX", StringComparison.OrdinalIgnoreCase) ? "FFXI" : "POL") + "-" + code.Groups[2].Value;
         }
         return null;
+    }
+    public static string? DisconnectDialogCode(LoginFrame frame)
+    {
+        var code = MaintenanceErrorCode(frame);
+        return code switch
+        {
+            "POL-0250" when frame.Has("No response from server") => code,
+            "FFXI-4001" when frame.Has("server") && frame.Has("timed out") && frame.Has("shut down") => code,
+            "FFXI-4002" when frame.Has("Time out") && frame.Has("server") && frame.Has("shut down") => code,
+            _ => null
+        };
     }
     public static bool IsCredentialRejection(LoginFrame frame) =>
         frame.Has("POL-5311") || frame.Has("password entered is incorrect") || frame.Has("Incorrect password") || frame.Has("Invalid password") || frame.Has("Wrong password") ||

@@ -7,8 +7,8 @@ using FFXILauncher.Core;
 
 namespace FFXILauncher.Desktop.Platform;
 
-internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0);
-internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false);
+internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0, bool RecoverDisconnect = false);
+internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false, string? ConfirmedErrorCode = null, bool NeedsFreshRestart = false, bool ConnectionRecovered = false);
 
 public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomation, IDisposable
 {
@@ -20,6 +20,9 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
     internal string? CapturePath => sessionDirectory == null ? null : Path.Combine(sessionDirectory, "frame.bmp");
     internal LoginCheckpoint? LastInspectionCheckpoint { get; private set; }
     internal bool LastInspectionCredentialRejected { get; private set; }
+    internal string? LastInspectionErrorCode { get; private set; }
+    internal bool LastRecoveryNeedsRestart { get; private set; }
+    internal bool LastConnectionRecovered { get; private set; }
     internal string? LastSectionResult { get; private set; }
     public event Action<Guid, string>? Progress;
     public string? SetupProblem(AccountConfiguration account) => LoginCheckpoints.Requirements(account) ??
@@ -31,7 +34,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
         if (ReadinessProblem(account) is {} problem) throw new InvalidOperationException(problem);
         await RequestAsync(account, process, false, cancellationToken);
     }
-    internal async Task<bool> RequestAsync(AccountConfiguration account, ManagedProcess process, bool inspect, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0)
+    internal async Task<bool> RequestAsync(AccountConfiguration account, ManagedProcess process, bool inspect, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0, bool recoverDisconnect = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         var canonical = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher");
@@ -45,7 +48,10 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
             LastSectionResult = null;
             LastInspectionCheckpoint = null;
             LastInspectionCredentialRejected = false;
-            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, DateTimeOffset.UtcNow.AddMinutes(8), inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs));
+            LastInspectionErrorCode = null;
+            LastRecoveryNeedsRestart = false;
+            LastConnectionRecovered = false;
+            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, DateTimeOffset.UtcNow.AddMinutes(8), inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, recoverDisconnect));
             var deadline = DateTimeOffset.UtcNow.AddMinutes(8); string? stage = null;
             while (DateTimeOffset.UtcNow < deadline)
             {
@@ -61,6 +67,9 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                         if (memberSectionOnly || trainingSection != "") LastSectionResult = reply.Stage;
                         LastInspectionCheckpoint = reply.InspectedCheckpoint;
                         LastInspectionCredentialRejected = reply.CredentialRejected;
+                        LastInspectionErrorCode = reply.ConfirmedErrorCode;
+                        LastRecoveryNeedsRestart = reply.NeedsFreshRestart;
+                        LastConnectionRecovered = reply.ConnectionRecovered;
                         return reply.FullFlowValidated;
                     }
                 }
@@ -213,6 +222,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                     try
                     {
                         if (request.TrainingSection is not ("" or "password" or "play" or "continue" or "character" or "return" or "success") ||
+                            request.RecoverDisconnect && (request.InspectOnly || request.MemberSectionOnly || request.TrainingSection != "") ||
                             request.InspectOnly && (request.MemberSectionOnly || request.TrainingSection != "") ||
                             request.MemberSectionOnly && request.TrainingSection != "") throw new LoginSafetyException("Conflicting calibration modes rejected.");
                         if (request.PressMs is < 1 or > 80 || request.PollMs is < 1 or > 50 ||
@@ -220,9 +230,11 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                             throw new LoginSafetyException("Timing settings outside bounded section training rejected.");
                         if (request.TrainingSection == "success" ? request.MenuGapMs is < 0 or > 3000 : request.MenuGapMs != 0) throw new LoginSafetyException("Menu gap outside bounded success training rejected.");
                         var config = new ConfigurationStore(root).Load(); var account = config.ConfiguredAccounts.Single(a => a.Id == request.Account);
+                        if (request.RecoverDisconnect && (!account.MaintainConnection || !account.AutoLoginEnabled))
+                            throw new LoginSafetyException("Maintain connection was disabled; recovery cancelled.");
                         var engine = new WindowsLoginEngine(directory, config, account, request.Process, Report);
-                        engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs).GetAwaiter().GetResult();
-                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, request.InspectOnly ? "Calibration capture saved." : request.MemberSectionOnly || request.TrainingSection != "" ? engine.MemberSectionResult ?? "Section completed without a full login proof." : "Character and world verified online.", true, true, !request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && engine.FullFlowValidated, engine.InspectedCheckpoint, engine.InspectedCredentialRejection));
+                        engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs, request.RecoverDisconnect).GetAwaiter().GetResult();
+                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, request.InspectOnly ? "Calibration capture saved." : engine.NeedsFreshRestart ? "A further error prevented reconnection; a fresh POL process is required." : request.MemberSectionOnly || request.TrainingSection != "" ? engine.MemberSectionResult ?? "Section completed without a full login proof." : "Character and world verified online.", true, true, !request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && engine.FullFlowValidated, engine.InspectedCheckpoint, engine.InspectedCredentialRejection, engine.InspectedErrorCode, engine.NeedsFreshRestart, engine.ConnectionRecovered));
                     }
                     catch (Exception ex)
                     {

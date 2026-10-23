@@ -64,6 +64,8 @@ Select **Deploy addon + enable auto-load** to install FFXIManager and add its st
 
 After an addon update, use `//lua reload FFXIManager` in each running game. Future sessions load it automatically. Closing the manager leaves games running.
 
+Maintain connection also checks a still-running POL process for disconnect dialogs. After confirming the same POL-0250 or FFXI-4001/4002 dialog twice, it acknowledges OK and tries the existing character-selection route. A further confirmed error closes only that tracked process and queues a fresh login. Real incoming server traffic is tracked separately from the addon rendering heartbeat, which can remain active on an error screen. Maintenance holds and credential-rejection stops still apply.
+
 Account metadata is saved under `%LOCALAPPDATA%\FFXILauncher\accounts.json`, and passwords under `vault/`, encrypted with Windows DPAPI for the current Windows user. Do not commit local account data, vaults or addon control files. These paths and local build/agent artifacts are excluded by `.gitignore`.
 
 ## Versioning and releases

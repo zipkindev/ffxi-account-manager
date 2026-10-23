@@ -41,6 +41,11 @@ internal static class MaintenanceMonitorRegression
                 throw new Exception("Notice checking did not recover after an unavailable feed.");
             if (JsonSerializer.Deserialize<MaintenanceSnapshot>(File.ReadAllText(cachePath))?.Windows.Count != 2)
                 throw new Exception("Recovered notice data was not persisted.");
+            handler.SupportOnly = true;
+            var beforeSupport = handler.Requests;
+            monitor.RefreshAsync(true, CancellationToken.None).GetAwaiter().GetResult();
+            if (handler.Requests != beforeSupport + 1 || monitor.Snapshot.ReviewRequired?.Count != 0)
+                throw new Exception("Support-center-only notices must not block game reconnection or require notice parsing.");
 
             void AssertUnavailable()
             {
@@ -59,6 +64,7 @@ internal static class MaintenanceMonitorRegression
     private sealed class NoticeHandler : HttpMessageHandler
     {
         public bool Healthy { get; set; }
+        public bool SupportOnly { get; set; }
         public Exception? Failure { get; set; }
         public int Requests { get; private set; }
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -67,7 +73,7 @@ internal static class MaintenanceMonitorRegression
             if (Failure != null) return Task.FromException<HttpResponseMessage>(Failure);
             var body = !Healthy ? "<html><h2>Maintenance</h2>The service is currently unavailable due to maintenance.</html>"
                 : request.RequestUri!.AbsolutePath.EndsWith("list_mnt.shtml")
-                    ? "<a href='../polnews/news101.shtml'>All Worlds Maintenance</a>"
+                    ? SupportOnly ? "<a href='../polnews/news200.shtml'>Support Center Emergency Maintenance (Oct. 21)</a>" : "<a href='../polnews/news101.shtml'>All Worlds Maintenance</a>"
                     : "FINAL FANTASY XI [Date &amp; Time] Oct. 22, 2099 1:00 to 2:00 (UTC) [Affected Worlds] All Worlds";
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
         }

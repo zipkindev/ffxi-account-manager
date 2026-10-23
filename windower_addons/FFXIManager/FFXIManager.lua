@@ -1,6 +1,6 @@
 _addon.name = 'FFXIManager'
 _addon.author = 'FFXI Account Manager'
-_addon.version = '0.3.6'
+_addon.version = '0.3.7'
 _addon.commands = {'ffximanager'}
 local resources = require('resources')
 local packets = require('packets')
@@ -8,6 +8,7 @@ local root = windower.addon_path .. 'data/'
 local session = tostring(os.time()) .. '_' .. tostring({}):gsub('[^0-9a-f]', '') .. '_' .. tostring(math.random(100000, 999999999))
 local registered = os.time()
 local last_poll = 0
+local last_incoming = 0
 local last_report = nil
 local startup_followup_at = nil
 local master = nil
@@ -106,6 +107,7 @@ local function poll()
     if not character then return end
     stem = world:lower() .. '_' .. character:lower()
     write(root .. stem .. '.status', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. now .. '\n')
+    write(root .. stem .. '.connection', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. now .. '\n' .. last_incoming .. '\n')
     -- Stats and environment are sampled once per minute. Keep control polling
     -- and the lightweight health heartbeat independent of display reporting.
     if not last_report then startup_followup_at = now + 15 end
@@ -151,7 +153,10 @@ end
 local function clear()
     if not stem then return end
     local value = read(root .. stem .. '.status')
-    if value and value:sub(1, #session + 1) == session .. '\n' then os.remove(root .. stem .. '.status') end
+    if value and value:sub(1, #session + 1) == session .. '\n' then
+        os.remove(root .. stem .. '.status')
+        os.remove(root .. stem .. '.connection')
+    end
 end
 windower.register_event('prerender', poll)
 local function report_change()
@@ -194,6 +199,7 @@ windower.register_event('unload', clear)
 -- Observe original server system messages only; never persist player chat or injected packets.
 windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
     if injected or blocked then return end
+    last_incoming = os.time()
     if id == 0x061 then capture_master(original); return end
     if id ~= 0x017 then return end
     local ok, packet = pcall(packets.parse, 'incoming', original)

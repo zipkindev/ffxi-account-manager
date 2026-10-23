@@ -18,6 +18,19 @@ internal static class WindowsLoginValidation
         try { var proof = WindowsAutoLogin.ReadJson<Proof>(ProofPath(directory, account)); return proof != null && proof.Binding == Binding(account) && proof.Build == Build && proof.VerifiedUtc <= DateTimeOffset.UtcNow; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
+    // A confirmed disconnect may validate the same previously tested mapping
+    // through a full fresh login after an app update. This does not authorize
+    // ordinary unattended launches with an older build's proof.
+    public static bool HasPriorValidation(string directory, AccountConfiguration account)
+    {
+        try
+        {
+            var proof = WindowsAutoLogin.ReadJson<Proof>(ProofPath(directory, account));
+            return proof != null && proof.Binding == Binding(account) && Guid.TryParseExact(proof.Build, "N", out _) &&
+                proof.VerifiedUtc <= DateTimeOffset.UtcNow;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
+    }
     public static void Record(string directory, AccountConfiguration account)
     {
         WindowsPrivateDirectory.Create(Path.Combine(directory, "login-validation"));

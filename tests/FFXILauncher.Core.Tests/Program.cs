@@ -491,6 +491,55 @@ Check(LoginCheckpoints.PolLogInPoint(HighlightedLogIn(1) with { Lines = [..Highl
 }
 var maintenanceErrorFrame = new LoginFrame(640, 480, [new("Error code:POL-0010", [new("POL-0010", 70, 150, 95, 16)])]);
 Check(LoginCheckpoints.MaintenanceErrorCode(maintenanceErrorFrame) == "POL-0010", "maintenance cleanup requires a real numeric client error code in the dialog region");
+foreach (var code in new[] { "POL-0250", "FFXI-4001", "FFXI-4002" })
+{
+    var message = code == "POL-0250" ? "No response from server. Please try again later." : "No response from server. Connection timed out. Press OK to shut down. Time out reported by the server.";
+    var dialog = maintenanceErrorFrame with { Lines = [new("Error code: " + code + " " + message, [new(code, 70, 150, 95, 16)])] };
+    Check(LoginCheckpoints.DisconnectDialogCode(dialog) == code, "recognize a complete disconnect dialog: " + code);
+    Check(DisconnectRecovery.CanRestart(scheduled, false, false, code), "maintained account permits confirmed disconnect recovery: " + code);
+    Check(!DisconnectRecovery.CanRestart(scheduled with { MaintainConnection = false }, false, false, code) &&
+        !DisconnectRecovery.CanRestart(scheduled, true, false, code) && !DisconnectRecovery.CanRestart(scheduled, false, true, code),
+        "disabled recovery, intentional stop and credential rejection block restart: " + code);
+}
+Check(LoginCheckpoints.DisconnectDialogCode(maintenanceErrorFrame with { Lines = [new("Error code: FFXI-4001", [new("FFXI-4001", 70, 150, 95, 16)])] }) == null,
+    "an isolated code without disconnect dialog wording cannot authorize an OK click");
+Check(LoginCheckpoints.DisconnectDialogCode(maintenanceErrorFrame with { Lines = [new("Error code: FFXl-4002", [new("FFXl-4002", 70, 150, 95, 16)]), new("Time out reported by the FINAL FANTASY XI server. Press OK to shut down.", [])] }) == "FFXI-4002",
+    "live Windows OCR lowercase-l prefix reads the exact disconnect code without changing its digits");
+Check(LoginCheckpoints.DisconnectDialogCode(maintenanceErrorFrame with { Lines = [new("Error code: FFXl-4OO2 Time out reported by the server. Press OK to shut down.", [new("FFXl-4OO2", 70, 150, 95, 16)])] }) == null,
+    "ambiguous error digits cannot authorize disconnect recovery");
+Check(!DisconnectRecovery.CanRestart(scheduled, false, false, "POL-5311") && !DisconnectRecovery.CanRestart(scheduled, false, false, "FFXI-3001"),
+    "unrelated errors do not initiate disconnect recovery");
+Check(DisconnectRecovery.Followup("POL-0250", "POL-0250", LoginCheckpoint.Error) == DisconnectFollowup.FreshRestart,
+    "a confirmed POL-0250 after acknowledging a disconnect requests a fresh process");
+Check(DisconnectRecovery.Followup(null, null, LoginCheckpoint.Characters) == DisconnectFollowup.ResumeCharacterSelection,
+    "a disconnect returning to character selection resumes the existing session");
+Check(DisconnectRecovery.Followup("FFXI-4001", "POL-0250", LoginCheckpoint.Error) == DisconnectFollowup.Wait &&
+    DisconnectRecovery.Followup(null, null, LoginCheckpoint.Unknown) == DisconnectFollowup.Wait,
+    "changing or unrecognized screens cannot authorize forced cleanup");
+Check(!DisconnectRecovery.CanCloseHung(scheduled, false, SessionHealth.Unresponsive, maintenanceStart, maintenanceStart.AddSeconds(89), false, false) &&
+    DisconnectRecovery.CanCloseHung(scheduled, false, SessionHealth.Unresponsive, maintenanceStart, maintenanceStart.AddSeconds(90), false, false),
+    "hung process cleanup requires a full ninety seconds without response");
+Check(!DisconnectRecovery.CanCloseHung(scheduled, false, SessionHealth.Unresponsive, maintenanceStart, maintenanceStart.AddMinutes(5), true, false) &&
+    !DisconnectRecovery.CanCloseHung(scheduled, false, SessionHealth.Unresponsive, maintenanceStart, maintenanceStart.AddMinutes(5), false, true),
+    "a live render heartbeat or recent server traffic protects a hung-looking process from timeout cleanup");
+var trafficDirectory = Path.Combine(Path.GetTempPath(), "ffxi-traffic-" + Guid.NewGuid());
+Directory.CreateDirectory(trafficDirectory);
+try
+{
+    var now = DateTimeOffset.UtcNow;
+    var session = new GameSession(new string('a', 32), scheduled.Character, scheduled.World, now.AddHours(-1), now);
+    var path = Path.Combine(trafficDirectory, scheduled.World.ToLowerInvariant() + "_" + scheduled.Character.ToLowerInvariant() + ".connection");
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "an older addon without traffic telemetry falls back to screen inspection");
+    void Traffic(DateTimeOffset incoming) => File.WriteAllText(path, $"{session.Nonce}\n{session.Character}\n{session.World}\n{session.RegisteredUtc.ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n{incoming.ToUnixTimeSeconds()}\n");
+    Traffic(now.AddSeconds(-1));
+    Check(ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "fresh server traffic protects a matching connected session");
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session with { Nonce = new string('b', 32) }, now), "a replaced addon session cannot inherit prior server activity");
+    Traffic(now.AddMinutes(-2));
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "rendering heartbeats cannot hide stale server traffic");
+    Traffic(now.AddMinutes(1));
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "future traffic timestamps cannot suppress recovery inspection");
+}
+finally { Directory.Delete(trafficDirectory, true); }
 Check(LoginCheckpoints.MaintenanceErrorCode(LoginScreen("Error code", "Generic problem")) == null, "generic error text cannot authorize forced maintenance cleanup");
 Check(LoginCheckpoints.MaintenanceErrorCode(maintenanceErrorFrame with { Lines = [new("Error code:FFXI-3001", [new("FFXI-3001", 70, 440, 95, 16)])] }) == null,
     "a code appearing in the chat footer cannot authorize forced maintenance cleanup");

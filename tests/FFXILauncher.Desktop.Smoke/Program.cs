@@ -88,9 +88,15 @@ if (args is ["--game-window-ready", var processId, var startedTicks, var executa
             WindowsLoginValidation.Record(root, account);
             if (!WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Completed validation did not persist.");
             foreach (var changed in new[] { account with { SquareEnixId = "OtherID" }, account with { Character = "Other" }, account with { World = "Odin" }, account with { Profile = "Other" }, account with { UsesOneTimePassword = true } })
-                if (WindowsLoginValidation.IsValidated(root, changed)) throw new Exception("Changed account mapping reused login validation.");
+                if (WindowsLoginValidation.IsValidated(root, changed) || WindowsLoginValidation.HasPriorValidation(root, changed)) throw new Exception("Changed account mapping reused login validation.");
+            var proofPath = Path.Combine(root, "login-validation", account.Id.ToString("N") + ".json");
+            var proof = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(proofPath))!;
+            proof["Build"] = Guid.NewGuid().ToString("N");
+            File.WriteAllText(proofPath, proof.ToJsonString());
+            if (WindowsLoginValidation.IsValidated(root, account) || !WindowsLoginValidation.HasPriorValidation(root, account))
+                throw new Exception("A prior build proof must remain mapping-bound and cannot authorize ordinary unattended startup.");
             File.WriteAllText(Path.Combine(root, "login-validation", account.Id.ToString("N") + ".json"), "{}");
-            if (WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Corrupt proof accepted.");
+            if (WindowsLoginValidation.IsValidated(root, account) || WindowsLoginValidation.HasPriorValidation(root, account)) throw new Exception("Corrupt proof accepted.");
             Console.WriteLine("PASS: validation persists only for the current automation build and account mapping; changed identities and corrupt proofs stay blocked.");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
