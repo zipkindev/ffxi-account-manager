@@ -82,6 +82,22 @@ Linux smoke and native Windows smoke passed the compatibility regressions, inclu
 
 A passive Hauplibond follow-up on October 23 observed report timestamps advancing exactly 30 seconds apart. Its incoming counter advanced from 1530 to 1533 to 1535, with zero blocked packets; a quiet sample reached 66 seconds since the last packet and then resumed. Reports were 8–19 seconds old at observation. These samples support a prior false disconnect trigger caused by sparse incoming chunk observations, not delayed publication or measured network latency. No OCR, foreground changes, or server requests were used for these reads.
 
+### Updater preparation (1.0.30)
+
+The previous engine had no updater recognition, a six-minute engine/eight-minute worker limit, and an immediate 30-second game-window wait after Play confirmation. The prepared path recognizes an explicit Version Update heading and specific availability/confirmation/progress/completion wording, checks unique control geometry twice, and waits through the update before resuming normal login. A separate per-user file lock serializes updater access. Other POL processes for the installation must have stable PlayOnline Viewer startup windows; game, character or ambiguous windows block patch-related input. No account is closed to make room for an update.
+
+Update progress waits five seconds between captures, permits up to two hours overall, and stops after 15 minutes without changed phase/file/count/percentage evidence. The full-login request envelope includes this budget; short inspection/calibration and in-place disconnect requests retain their existing limits. Unknown text never authorizes a button. Numeric errors, repair routes and restart requests preserve the process rather than forcing cleanup or guessing. Square Enix's [version-update instructions](https://support.na.square-enix.com/document/manual/20/FFXI_manual_vc09_AE5.pdf) establish the Version Update/Update flow; the current client layouts still need a real patch trial.
+
+Next-maintenance checklist:
+
+1. Preserve the current known-good release and confirm all accounts have Maintain connection enabled and valid login mappings. Use Mini first in startup order. Allow the scheduled graceful shutdowns to finish before patching shared files.
+2. At the verified maintenance-window end, observe Mini's fresh POL login and version check. Confirm the real Version Update heading, each control and actual progress match the prepared recognizer. Save only updater-specific evidence; exclude credentials and tokens.
+3. Confirm no click repeats on unchanged screens, no other game session is terminated, and only one updater touches the shared installation. Investigate any unfamiliar screen in place. A viewer/Windows restart request needs separate handoff work; do not mark the trial complete at that prompt.
+4. Observe explicit update completion, continuation into the game, exact Mini character/world identity and fresh server traffic. Then allow the remaining startup queue to continue. A no-update launch does not validate patching.
+5. After all sessions are healthy, test crash recovery on Mini only. Pin its PID/start time, confirm the old process exits, and verify one fresh process completes login with fresh server traffic while the other three processes remain unchanged.
+
+All 387 core checks and the native Windows smoke suite passed during preparation, including updater recognition/geometry, action deduplication across OCR misses, shared-game blocking, progress/stall/deadline rules, and preserved compatible login proofs. No update or crash was induced against the current running games during preparation. Restart handoff and the full maintenance-update cycle remain unvalidated until the real trial. The existing normal login sequence is retained; its reviewed 1.0.29 fingerprint is explicitly compatible with this baseline so updater preparation alone does not require relogging every account.
+
 ## October 21, 2026 graphics-wrapper investigation
 
 Windows reported 14 POL Application Error events in the observed 24-hour window for local dgVoodoo 2.87.3 `DDRAW.dll`, exception `0xc0000005`, offset `0x0004ab0a`. A single manager launch reproduced an unresponsive POL window without credential input. The same time range also contained separate older LuaCore failures; they are not evidence of the same cause.

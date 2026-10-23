@@ -56,8 +56,10 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
             LastInspectionErrorCode = null;
             LastRecoveryNeedsRestart = false;
             LastConnectionRecovered = false;
-            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, DateTimeOffset.UtcNow.AddMinutes(8), inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, recoverDisconnect));
-            var deadline = DateTimeOffset.UtcNow.AddMinutes(8); string? stage = null;
+            var duration = !inspect && !memberSectionOnly && trainingSection == "" && !recoverDisconnect ? GameUpdateWorkflow.MaximumLoginDuration : TimeSpan.FromMinutes(8);
+            var deadline = DateTimeOffset.UtcNow + duration;
+            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, deadline, inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, recoverDisconnect));
+            string? stage = null;
             while (DateTimeOffset.UtcNow < deadline)
             {
                 cancellation.ThrowIfCancellationRequested();
@@ -213,7 +215,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
             while (!parent.HasExited && File.Exists(Path.Combine(directory, "token")))
             {
                 var request = ReadJson<LoginRequest>(Path.Combine(directory, "request.json"));
-                if (request != null && request.Nonce != handled && Guid.TryParseExact(request.Nonce, "N", out _) && request.Token == token && request.ExpiresUtc > DateTimeOffset.UtcNow && request.ExpiresUtc <= DateTimeOffset.UtcNow.AddMinutes(8))
+                if (request != null && request.Nonce != handled && Guid.TryParseExact(request.Nonce, "N", out _) && request.Token == token && request.ExpiresUtc > DateTimeOffset.UtcNow && request.ExpiresUtc <= DateTimeOffset.UtcNow + (!request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && !request.RecoverDisconnect ? GameUpdateWorkflow.MaximumLoginDuration : TimeSpan.FromMinutes(8)))
                 {
                     handled = request.Nonce;
                     using var cancelled = new CancellationTokenSource();

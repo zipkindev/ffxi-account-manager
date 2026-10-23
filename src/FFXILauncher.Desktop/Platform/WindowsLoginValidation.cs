@@ -15,7 +15,7 @@ internal static class WindowsLoginValidation
     private static string ProofPath(string directory, AccountConfiguration account) => Path.Combine(directory, "login-validation", account.Id.ToString("N") + ".json");
     public static bool IsValidated(string directory, AccountConfiguration account)
     {
-        try { var proof = WindowsAutoLogin.ReadJson<Proof>(ProofPath(directory, account)); return proof != null && proof.Binding == Binding(account) && Guid.TryParseExact(proof.Build, "N", out _) && proof.VerifiedUtc <= DateTimeOffset.UtcNow && (proof.LoginFlow == LoginFlowCompatibility.Current || proof.LoginFlow == null && LoginFlowCompatibility.AcceptsLegacyBuild(proof.Build)); }
+        try { var proof = WindowsAutoLogin.ReadJson<Proof>(ProofPath(directory, account)); return proof != null && proof.Binding == Binding(account) && Guid.TryParseExact(proof.Build, "N", out _) && proof.VerifiedUtc <= DateTimeOffset.UtcNow && (proof.LoginFlow == LoginFlowCompatibility.Current || LoginFlowCompatibility.AcceptsPriorFlow(proof.LoginFlow) || proof.LoginFlow == null && LoginFlowCompatibility.AcceptsLegacyBuild(proof.Build)); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return false; }
     }
     // Confirmed disconnects may revalidate a previously tested mapping even

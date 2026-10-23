@@ -116,6 +116,9 @@ if (args is ["--game-window-ready", var processId, var startedTicks, var executa
             File.WriteAllText(proofPath, proof.ToJsonString());
             if (!WindowsLoginValidation.IsValidated(root, account))
                 throw new Exception("An unrelated build change invalidated unchanged login automation.");
+            proof["LoginFlow"] = "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527";
+            File.WriteAllText(proofPath, proof.ToJsonString());
+            if (!WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Reviewed unchanged normal login route lost validation after adding the updater branch.");
             proof["LoginFlow"] = new string('0', 64);
             File.WriteAllText(proofPath, proof.ToJsonString());
             if (WindowsLoginValidation.IsValidated(root, account) || !WindowsLoginValidation.HasPriorValidation(root, account))

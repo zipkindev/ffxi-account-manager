@@ -4,7 +4,7 @@ using FFXILauncher.Core;
 
 namespace FFXILauncher.Desktop.Platform;
 
-internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration config, AccountConfiguration account, ManagedProcess process, Action<string> report)
+internal sealed partial class WindowsLoginEngine(string directory, LauncherConfiguration config, AccountConfiguration account, ManagedProcess process, Action<string> report)
 {
     private readonly WindowsLoginWindow window = new(process, config.PolPath);
     private readonly LoginFocusRecovery focusRecovery = new(() =>
@@ -613,6 +613,25 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     // Only wait for capture; never send input or steal focus while it is changing.
                     await Task.Delay(200, cancellation); continue;
                 }
+                if (!gameHandoffFocused && previous == LoginCheckpoint.PlayConfirmation && window.IsGameWindow)
+                {
+                    await window.WaitForGameWindowAsync(cancellation);
+                    dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                    try { window.Focus(); } finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+                    gameHandoffFocused = true;
+                    frame = await ReadFrame(cancellation);
+                }
+                if (!memberSectionOnly && trainingSection == "" && GameUpdateWorkflow.Recognize(frame).Stage != GameUpdateStage.None)
+                {
+                    var updateStarted = DateTimeOffset.UtcNow;
+                    await RunGameUpdateAsync(frame, cancellation);
+                    deadline += DateTimeOffset.UtcNow - updateStarted;
+                    previous = LoginCheckpoint.Unknown;
+                    stageSince = unknownSince = DateTimeOffset.UtcNow;
+                    openingGameUntil = null;
+                    loadingPollUntil = DateTimeOffset.UtcNow;
+                    continue;
+                }
                 var stage = LoginCheckpoints.Recognize(frame);
                 if (trainingSection == "character" && stage == LoginCheckpoint.Unknown &&
                     LoginCheckpoints.ConfirmationCancelPoint(frame, account.Character) != null)
@@ -1002,10 +1021,9 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 {
                     report("Waiting for POL to open the FFXI game window…");
                     openingGameUntil = DateTimeOffset.UtcNow.AddSeconds(30);
-                    await window.WaitForGameWindowAsync(cancellation);
-                    dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
-                    try { window.Focus(); } finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
-                    gameHandoffFocused = true;
+                    // Version checks can open the updater before FFXI. The main
+                    // capture loop recognizes it instead of timing out on HWND.
+                    gameHandoffFocused = false;
                 }
                 // The next fresh capture establishes readiness; avoid imposing
                 // another long pause on every already-rendered screen.

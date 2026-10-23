@@ -12,7 +12,7 @@ internal static class LoginFlowCompatibility
     {
         var assembly = typeof(LoginFlowCompatibility).Assembly;
         var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith(Prefix, StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
-        if (names.Length != 13) throw new InvalidOperationException("Login compatibility inputs are incomplete.");
+        if (names.Length != 15) throw new InvalidOperationException("Login compatibility inputs are incomplete.");
         var inputs = names.Select(name =>
         {
             using var stream = assembly.GetManifestResourceStream(name)!;
@@ -34,14 +34,19 @@ internal static class LoginFlowCompatibility
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(manifest.ToString())));
     }
 
-    // Audited deployed 1.0.26/1.0.28 builds: their completed full-login proofs
+    // Audited deployed 1.0.26/1.0.28/1.0.29 builds: their completed full-login proofs
     // used the trained POL input route retained in this baseline. Disconnect
     // handling changed, but did not change credentials or character selection.
     // Only these exact build IDs may carry legacy proofs into this baseline;
     // a later login-source change automatically disables this bridge.
-    private const string LegacyBaseline = "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527";
+    private const string LegacyBaseline = "FFBBEDC8DC79EF9E2E5836801B0219F99701813931A2D63174A6BE148AE74D00";
+    // 1.0.29's normal input route is unchanged; only the separately recognized
+    // updater branch and its wait envelope were added.
+    internal static bool AcceptsPriorFlow(string? flow) => Current == LegacyBaseline &&
+        flow == "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527";
     internal static bool AcceptsLegacyBuild(string? build) => Current == LegacyBaseline && build is
         "eaa4e971ee0140869898d88ea901d5ad" or
         "cf5fbeb42c504f57bbf3da94d0186a1c" or
-        "b8d01e8893f7413e92677bda379cd5d3";
+        "b8d01e8893f7413e92677bda379cd5d3" or
+        "f43fd3a67f2040a6b532e7988775b0fb";
 }

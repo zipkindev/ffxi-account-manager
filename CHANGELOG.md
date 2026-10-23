@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.30
+
+- Prepare a guarded updater branch during full POL login: recognize version-update availability, confirmation, file checks, downloads, installation and completion before returning to the normal character/world verification route.
+- Allow up to two hours for an update, with five-second progress checks and a 15-minute no-progress stop. Updater controls require two matching reads, unique in-bounds controls and an exact owned process; no blind Enter or file-repair actions are used.
+- Serialize updater access and wait while another game may be using the shared installation. Unknown screens, update errors and POL/Windows restart requests preserve the process for inspection. Actual updater layouts, restart handoff and end-to-end maintenance updating still require the next live maintenance trial.
+- Preserve validation for the reviewed unchanged normal login route while adding the separate updater branch. No game files were patched during preparation.
+
 ## 1.0.29
 
 - Preserve complete-login validation across app updates when the login implementation and account mapping are unchanged. Validation now uses a deterministic fingerprint of login, OCR, input, cache and profile-resolution sources instead of the assembly build ID; release notes, artwork, packaging and unrelated UI changes do not invalidate it.

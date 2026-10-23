@@ -86,6 +86,14 @@ Known game maintenance pauses recovery. Support-center-only notices do not block
 
 Live testing verified the FFXI-4001/4002 → POL-0250 → fresh-login path on two accounts; all four test accounts ultimately had responsive sessions and fresh server traffic. A separate Mini-only trial on 1.0.28 verified automatic FFXI-4001 recovery through cached character confirmation and world entry in the same process, with the other three accounts preserved. The hang-timeout path still needs a separate live trial. See [Windows troubleshooting](docs/WINDOWS-TROUBLESHOOTING.md#running-process-disconnect-recovery-1026) for validation scope and diagnostics.
 
+## Game updates after maintenance
+
+Version **1.0.30** prepares an updater branch in full automatic login. After maintenance ends, the existing startup queue can launch POL, recognize an explicit Version Update screen, choose its uniquely identified Update/Next control, handle a specific update confirmation, wait through file checking/download/install, acknowledge explicit completion, and continue through the normal login route to verified character/world entry. Screens are checked twice before an updater control is clicked; the updater never sends a blind Enter or chooses file repair.
+
+Only one updater runs at a time. Other live or ambiguous game windows using the same POL installation block updater input so the shared game files are not patched while those sessions run. Prepared startup POL windows may queue behind it. Progress is inspected every five seconds during the active update, with a two-hour limit and a 15-minute no-progress stop; healthy in-game connection checks remain every 30 seconds. Error, unknown or restart-required screens retain POL for inspection. A POL or Windows restart is not automated yet.
+
+**Validation status:** offline workflow tests and native checks prepare the route; they do not prove the current live updater layouts. At the next maintenance, use Mini as the first account, let other game sessions exit, record the real updater transitions and completion, verify fresh world traffic, and only then test Mini crash recovery. Do not count a no-update login as a successful update trial. See [the updater trial checklist](docs/WINDOWS-TROUBLESHOOTING.md#updater-preparation-1030).
+
 ## Versioning and releases
 
 `Version.props` is the single application version source. Click the version beneath the app title for bundled [release notes](CHANGELOG.md), including major updates and validation scope.
