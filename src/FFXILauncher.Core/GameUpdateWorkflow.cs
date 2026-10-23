@@ -38,6 +38,8 @@ public sealed class GameUpdateWorkflow
             return new(GameUpdateStage.Available, Button("Update", "Next"));
         return new(GameUpdateStage.None);
     }
+    public static bool MayClaim(ManagedProcess current, ManagedProcess? previous, bool previousStillRunning) =>
+        previous == null || !previousStillRunning || previous == current;
     public static OcrLine? Control(LoginFrame frame, string label)
     {
         var line = frame.UniqueLine(label);

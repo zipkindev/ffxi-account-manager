@@ -18,6 +18,12 @@ internal static class GameUpdateRegression
         check(GameUpdateWorkflow.Recognize(Frame("Version Update","Do you wish to begin the version update?","Yes","No")).Button=="Yes","specific version update confirmation permits Yes");
         check(GameUpdateWorkflow.Recognize(Frame("Version Update","Do you wish to begin the version update?","Yes")).Button==null,"incomplete confirmation authorizes no input");
         var now=DateTimeOffset.UtcNow;
+        var owner=new ManagedProcess(41,now.UtcDateTime);
+        var other=owner with {Pid=42};
+        check(!GameUpdateWorkflow.MayClaim(other,owner,true),"unfinished live updater prevents another account from patching after a timeout");
+        check(GameUpdateWorkflow.MayClaim(owner,owner,true),"the exact updater owner can resume in place");
+        check(GameUpdateWorkflow.MayClaim(other,owner,false),"confirmed exited owner releases updater eligibility");
+        check(!GameUpdateWorkflow.MayClaim(owner with{StartedUtc=owner.StartedUtc.AddSeconds(1)},owner,true),"PID reuse cannot inherit an updater lease");
         var flow=new GameUpdateWorkflow(now);
         flow.Observe(start,now);
         check(!flow.ShouldClick(start,true),"other running games prevent patch writes");

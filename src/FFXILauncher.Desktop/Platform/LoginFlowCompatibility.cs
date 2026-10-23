@@ -39,7 +39,7 @@ internal static class LoginFlowCompatibility
     // handling changed, but did not change credentials or character selection.
     // Only these exact build IDs may carry legacy proofs into this baseline;
     // a later login-source change automatically disables this bridge.
-    private const string LegacyBaseline = "3A85092BB975A1D6C1234D668FAC1B8A22971850690E0D0A2ADF363D9DC40778";
+    private const string LegacyBaseline = "F2BE03AFEEEBF06CA0BAC58EDAFCEABD3918ADBC30EE6A389AA74A75F223F8EF";
     // 1.0.29's normal input route is unchanged; only the separately recognized
     // updater branch and its wait envelope were added.
     internal static bool AcceptsPriorFlow(string? flow) => Current == LegacyBaseline &&

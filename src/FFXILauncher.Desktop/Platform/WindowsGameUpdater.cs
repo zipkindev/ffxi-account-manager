@@ -5,6 +5,19 @@ namespace FFXILauncher.Desktop.Platform;
 
 internal sealed partial class WindowsLoginEngine
 {
+    private sealed record UpdateOwner(ManagedProcess Process, string PolPath);
+    private static bool OwnerStillRunning(UpdateOwner owner)
+    {
+        try
+        {
+            using var p = Process.GetProcessById(owner.Process.Pid);
+            return p.StartTime.ToUniversalTime() == owner.Process.StartedUtc &&
+                string.Equals(WindowsSessionPlatform.ExecutablePath(p.Id), owner.PolPath, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (ArgumentException) { return false; }
+        catch (InvalidOperationException) { return false; }
+        catch (System.ComponentModel.Win32Exception) { return true; } // Uncertain ownership blocks another updater.
+    }
     private bool OtherGamesMayUseInstallation()
     {
         foreach (var candidate in Process.GetProcessesByName("pol"))
@@ -28,6 +41,14 @@ internal sealed partial class WindowsLoginEngine
     {
         if (recoveringDisconnect) throw new LoginSafetyException("An update is required; complete a fresh POL launch after the game sessions exit.");
         using var updaterLock = new FileStream(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher", "game-update.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var ownerPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher", "game-update-owner.json");
+        var owner = WindowsAutoLogin.ReadJson<UpdateOwner>(ownerPath);
+        if (File.Exists(ownerPath) && (owner?.Process == null || owner.Process.Pid <= 0 ||
+            owner.Process.StartedUtc <= DateTime.UnixEpoch || owner.Process.StartedUtc > DateTime.UtcNow.AddSeconds(3) || string.IsNullOrWhiteSpace(owner.PolPath)))
+            throw new LoginSafetyException("Updater ownership could not be read; no second update was started.");
+        if (!GameUpdateWorkflow.MayClaim(process, owner?.Process, owner != null && OwnerStillRunning(owner)))
+            throw new LoginSafetyException("Another POL process still owns an unfinished update. Finish that update before starting another; its process was preserved.");
+        WindowsAutoLogin.WriteJson(ownerPath, new UpdateOwner(process, config.PolPath));
         var flow = new GameUpdateWorkflow(DateTimeOffset.UtcNow);
         var frame = initial;
         var seenUpdate = false;
@@ -44,7 +65,11 @@ internal sealed partial class WindowsLoginEngine
             if (screen.Stage == GameUpdateStage.None)
             {
                 if (seenUpdate && LoginCheckpoints.Recognize(frame) is LoginCheckpoint.Home or LoginCheckpoint.Play or LoginCheckpoint.PlayConfirmation or LoginCheckpoint.Agreement or LoginCheckpoint.Title)
-                { report("Updater returned to the login route; continuing to verify character and world…"); return; }
+                {
+                    File.Delete(ownerPath);
+                    report("Updater returned to the login route; continuing to verify character and world…");
+                    return;
+                }
                 // Partial/unfamiliar screens never authorize clicks or completion.
             }
             else seenUpdate = true;
