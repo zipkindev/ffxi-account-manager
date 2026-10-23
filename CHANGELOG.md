@@ -7,6 +7,8 @@
 - Require matching server-traffic evidence for recovered world entry; a menu's still-advancing rendering heartbeat cannot establish success. Returning to POL during recovery requests a fresh process before calibration-only screen limits apply.
 - Retain the 30-second connection checks and third-consecutive-failure OCR threshold.
 
+- Live validation: a Mini-only FFXI-4001 trial waited through the failed-check threshold, reused cached character confirmation, and verified world entry with fresh server traffic in the same process. The three other games were preserved and temporary network-test rules were removed. All four configured accounts passed read-only disconnect-recovery readiness checks; ordinary startup/process-exit recovery retains its current-build full-login validation requirement.
+
 ## 1.0.27
 
 - Publish and check connection reports every 30 seconds while stats remain on their 60-second cadence. Inspect the screen only on the third consecutive missed or unhealthy connection check; each healthy, advancing report resets the count. Recheck reports before taking focus, preventing a transient file-read miss from immediately triggering OCR.
