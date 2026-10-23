@@ -22,6 +22,8 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
     private bool recoveringDisconnect;
     public bool NeedsFreshRestart { get; private set; }
     public bool ConnectionRecovered => recoveringDisconnect && worldVerified;
+    internal static bool StopsAtCharacterSelection(string section, bool recovering, bool cancelled) =>
+        !recovering && (section == "continue" || section == "character" && cancelled);
     public bool FullFlowValidated => identityVerified && passwordEntered && selectedCharacterVerified && characterConfirmed && worldVerified;
     internal string? MemberSectionResult { get; private set; }
     private int characterConfirmAttempts;
@@ -396,6 +398,11 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                         {
                             if (recoveringDisconnect)
                             {
+                                // Menus can keep the old rendering heartbeat
+                                // alive. Require matching server traffic before
+                                // accepting world entry or reading its screen.
+                                if (!ServerTraffic.IsRecent(Path.Combine(Path.GetDirectoryName(config.WindowerPath)!, "addons", "FFXIManager", "data"), account, session, DateTimeOffset.UtcNow))
+                                { await Task.Delay(200, cancellation); continue; }
                                 var evidence = await ReadFrame(cancellation);
                                 var error = LoginCheckpoints.MaintenanceErrorCode(evidence);
                                 if (error != null)
@@ -464,7 +471,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     if (stillVisible) { await Task.Delay(50, cancellation); continue; }
                 }
                 if (characterConfirmAttempts > 0 && confirmations.HasReplay && !characterCancelled &&
-                    (trainingSection == "character" || trainingSection == "" && identityVerified && passwordEntered))
+                    (recoveringDisconnect || trainingSection == "character" || trainingSection == "" && identityVerified && passwordEntered))
                 {
                     dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
                     var matched = false;
@@ -617,6 +624,11 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     stageSince = DateTimeOffset.UtcNow;
                     continue;
                 }
+                if (recoveringDisconnect && stage is LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor or LoginCheckpoint.Home or LoginCheckpoint.Play or LoginCheckpoint.PlayConfirmation)
+                {
+                    NeedsFreshRestart = true;
+                    return; // No POL credentials are entered during in-place recovery.
+                }
                 if (trainingSection == "password" && stage is not (LoginCheckpoint.Unknown or LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor or LoginCheckpoint.Home or LoginCheckpoint.Play or LoginCheckpoint.PlayConfirmation or LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Error) ||
                     trainingSection == "play" && stage is not (LoginCheckpoint.Unknown or LoginCheckpoint.Home or LoginCheckpoint.Play or LoginCheckpoint.Error) ||
                     trainingSection is "continue" or "character" && stage is LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor ||
@@ -689,8 +701,7 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                 // No character counter/detail-font read is needed to open its dialog.
                 if ((previous == LoginCheckpoint.Title || trainingSection == "character" || previous == LoginCheckpoint.Unknown && window.IsGameWindow) && characterConfirmAttempts == 0 &&
                     LoginCheckpoints.CanOpenDefaultCharacterConfirmation(frame)) stage = LoginCheckpoint.Characters;
-                if (trainingSection == "continue" && stage == LoginCheckpoint.Characters ||
-                    trainingSection == "character" && characterCancelled && stage == LoginCheckpoint.Characters)
+                if (stage == LoginCheckpoint.Characters && StopsAtCharacterSelection(trainingSection, recoveringDisconnect, characterCancelled))
                 {
                     if (trainingSection == "character")
                     {
@@ -713,11 +724,6 @@ internal sealed class WindowsLoginEngine(string directory, LauncherConfiguration
                     await Task.Delay(characterConfirmAttempts > 0 || window.IsGameWindow ? 50 : 150, cancellation); continue;
                 }
                 unknownSince = DateTimeOffset.UtcNow;
-                if (recoveringDisconnect && stage is LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor or LoginCheckpoint.Home or LoginCheckpoint.Play)
-                {
-                    NeedsFreshRestart = true;
-                    return; // No POL credentials are entered during in-place recovery.
-                }
                 if (confirmationRecoveryUsed && !characterConfirmed && stage is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
                     timing.InvalidateReplayPath();
                 if (stage == LoginCheckpoint.Error)

@@ -25,6 +25,11 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
     internal bool LastConnectionRecovered { get; private set; }
     internal string? LastSectionResult { get; private set; }
     public event Action<Guid, string>? Progress;
+    internal static void ValidateRecoveryCompletion(bool requested, bool recovered, bool restartRequired)
+    {
+        if (requested && recovered == restartRequired)
+            throw new LoginSafetyException("Disconnect recovery stopped before a verified world entry or fresh restart was established.");
+    }
     public string? SetupProblem(AccountConfiguration account) => LoginCheckpoints.Requirements(account) ??
         (!WindowsUnattendedSetup.IsElevated ? "Start the manager using its unattended desktop shortcut." : null);
     public string? ReadinessProblem(AccountConfiguration account) => SetupProblem(account) ??
@@ -234,6 +239,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                             throw new LoginSafetyException("Maintain connection was disabled; recovery cancelled.");
                         var engine = new WindowsLoginEngine(directory, config, account, request.Process, Report);
                         engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs, request.RecoverDisconnect).GetAwaiter().GetResult();
+                        ValidateRecoveryCompletion(request.RecoverDisconnect, engine.ConnectionRecovered, engine.NeedsFreshRestart);
                         WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, request.InspectOnly ? "Calibration capture saved." : engine.NeedsFreshRestart ? "A further error prevented reconnection; a fresh POL process is required." : request.MemberSectionOnly || request.TrainingSection != "" ? engine.MemberSectionResult ?? "Section completed without a full login proof." : "Character and world verified online.", true, true, !request.InspectOnly && !request.MemberSectionOnly && request.TrainingSection == "" && engine.FullFlowValidated, engine.InspectedCheckpoint, engine.InspectedCredentialRejection, engine.InspectedErrorCode, engine.NeedsFreshRestart, engine.ConnectionRecovered));
                     }
                     catch (Exception ex)

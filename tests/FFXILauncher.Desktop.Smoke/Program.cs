@@ -16,6 +16,20 @@ using FFXILauncher.Desktop;
 if (args.Contains("--pol-sizing-test")) { NativePolSizing.Run(); return; }
 MaintenanceMonitorRegression.Run();
 FocusRecoveryRegression.Run();
+if (!WindowsLoginEngine.StopsAtCharacterSelection("continue", false, false) ||
+    WindowsLoginEngine.StopsAtCharacterSelection("continue", true, false) ||
+    !WindowsLoginEngine.StopsAtCharacterSelection("character", false, true) ||
+    WindowsLoginEngine.StopsAtCharacterSelection("character", false, false))
+    throw new Exception("Disconnect recovery must enter the world while explicit section/cancel trials retain their stop points.");
+WindowsAutoLogin.ValidateRecoveryCompletion(true, true, false);
+WindowsAutoLogin.ValidateRecoveryCompletion(true, false, true);
+WindowsAutoLogin.ValidateRecoveryCompletion(false, false, false);
+foreach (var flags in new[] { (false, false), (true, true) })
+{
+    try { WindowsAutoLogin.ValidateRecoveryCompletion(true, flags.Item1, flags.Item2); throw new Exception("Unverified or conflicting recovery result reported success."); }
+    catch (LoginSafetyException) { }
+}
+Console.WriteLine("PASS: in-place recovery continues beyond character selection; incomplete/conflicting outcomes cannot report verified success.");
 if (args.Contains("--maintenance-regression")) return;
 
 if (args is ["--game-window-ready", var processId, var startedTicks, var executable])

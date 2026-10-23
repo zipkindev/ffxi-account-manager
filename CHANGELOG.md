@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.28
+
+- Complete in-place disconnect recovery through character confirmation and verified world entry. The recovery route no longer stops at the character-selection checkpoint used by explicit menu calibration.
+- Reuse the existing account-bound confirmation cache during recovery. An incomplete recovery can no longer report that the character and world were verified; it must establish either world entry or the need for a fresh restart.
+- Require matching server-traffic evidence for recovered world entry; a menu's still-advancing rendering heartbeat cannot establish success. Returning to POL during recovery requests a fresh process before calibration-only screen limits apply.
+- Retain the 30-second connection checks and third-consecutive-failure OCR threshold.
+
 ## 1.0.27
 
 - Publish and check connection reports every 30 seconds while stats remain on their 60-second cadence. Inspect the screen only on the third consecutive missed or unhealthy connection check; each healthy, advancing report resets the count. Recheck reports before taking focus, preventing a transient file-read miss from immediately triggering OCR.
