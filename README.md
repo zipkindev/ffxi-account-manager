@@ -82,7 +82,7 @@ Recovery requires two matching reads of **FFXI-4001**, **FFXI-4002** or **POL-02
 
 Known game maintenance pauses recovery. Support-center-only notices do not block game reconnection. Credential rejection, intentional shutdown, cancellation and disabling Maintain connection stop the applicable recovery actions. A hung window has a separate cleanup threshold: at least 90 continuous seconds without a rendering heartbeat or recent server traffic. Idle cards show **No process tracked**, with shutdown controls disabled when no process is running.
 
-Live testing verified the FFXI-4001/4002 → POL-0250 → fresh-login path on two accounts; all four test accounts ultimately had responsive sessions and fresh server traffic. Direct recovery through character selection and the hang-timeout path still need separate live trials. See [Windows troubleshooting](docs/WINDOWS-TROUBLESHOOTING.md#running-process-disconnect-recovery-1026) for validation scope and diagnostics.
+Live testing verified the FFXI-4001/4002 → POL-0250 → fresh-login path on two accounts; all four test accounts ultimately had responsive sessions and fresh server traffic. A separate Mini-only trial on 1.0.28 verified automatic FFXI-4001 recovery through cached character confirmation and world entry in the same process, with the other three accounts preserved. The hang-timeout path still needs a separate live trial. See [Windows troubleshooting](docs/WINDOWS-TROUBLESHOOTING.md#running-process-disconnect-recovery-1026) for validation scope and diagnostics.
 
 ## Versioning and releases
 
