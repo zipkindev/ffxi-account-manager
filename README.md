@@ -36,6 +36,8 @@ Select cards, then expand **Bulk actions** to apply settings or request graceful
 - Launch profiles individually or in batches. Per-account **Launch profile** follows the Auto login switch; bulk **Open profiles** controls leave login to you.
 - Discover and attach existing character sessions using process ownership and companion-addon character/world reports.
 - Complete POL and FFXI login with learned action paths, exact-character verification and guarded input. Keep keyboard and mouse idle during foreground login automation.
+- Recover brief focus loss during login screen capture with a bounded retry budget and process verification.
+- With **Maintain connection** enabled, detect confirmed disconnect dialogs even while POL is still running, try character selection, and restart the affected session when another error prevents reconnection.
 - Gracefully shut down individual or grouped sessions, cancel pending shutdowns, and clean up disconnected POL processes. Explicit Force close is available for attached hung sessions.
 - Track official global/world maintenance notices in your local time zone, schedule downtime and pause reconnection attempts during maintenance. The companion also observes in-game emergency warnings. In **Server maintenance**, choose whether to show card alerts and set one global 0–168-hour advance-notice threshold (default 12; 0 shows active maintenance only). Every account uses that threshold for its applicable notices. Matching-world notices take precedence over global notices; the main section retains the full schedule and in-game alerts. These display preferences do not change scheduling or reconnect protection.
 - Choose saved UI/artwork themes, landscape account cards, and drag-to-reorder account order.
@@ -47,6 +49,8 @@ Character stats, jobs and weather report once per minute. Master level comes fro
 ## Downloads and requirements
 
 Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). The standalone `.exe` needs no ZIP extraction or separate .NET installation. A folder ZIP is also available; extract its entire contents before launching it. The self-contained build does not require a separate .NET installation.
+
+The **1.0.26 disconnect-recovery fix** passed CI; its Windows folder package and standalone executable are available from the [validated 1.0.26 build](https://github.com/zipkindev/ffxi-account-manager/actions/runs/39915030733).
 
 You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
 
@@ -64,9 +68,19 @@ Select **Deploy addon + enable auto-load** to install FFXIManager and add its st
 
 After an addon update, use `//lua reload FFXIManager` in each running game. Future sessions load it automatically. Closing the manager leaves games running.
 
-Maintain connection also checks a still-running POL process for disconnect dialogs. After confirming the same POL-0250 or FFXI-4001/4002 dialog twice, it acknowledges OK and tries the existing character-selection route. A further confirmed error closes only that tracked process and queues a fresh login. Real incoming server traffic is tracked separately from the addon rendering heartbeat, which can remain active on an error screen. Maintenance holds and credential-rejection stops still apply.
-
 Account metadata is saved under `%LOCALAPPDATA%\FFXILauncher\accounts.json`, and passwords under `vault/`, encrypted with Windows DPAPI for the current Windows user. Do not commit local account data, vaults or addon control files. These paths and local build/agent artifacts are excluded by `.gitignore`.
+
+## Connection recovery in 1.0.26
+
+Enable **Auto login** and **Maintain connection** for each account you want recovered, complete its Windows login validation, and leave the manager open. The companion addon must be loaded for server-traffic reporting. Reload it after an update using `//lua reload FFXIManager`; fresh game launches load the updated addon automatically.
+
+Screen checks follow connection evidence. Recent incoming server packets suppress OCR entirely. If the last packet is over 30 seconds old, or packet telemetry is unavailable, the manager can inspect a responsive tracked window, at most once per minute while that condition persists. The addon's rendering heartbeat is tracked separately because an error screen can keep rendering after the connection has failed. Missing or stale traffic alone never authorizes force close.
+
+Recovery requires two matching reads of **FFXI-4001**, **FFXI-4002** or **POL-0250**, with the corresponding disconnect wording verified before pressing OK. It acknowledges the initial dialog and tries to return through character selection. If a further confirmed error prevents reconnection, it closes only that account's tracked process and queues a fresh login. If acknowledging the disconnect makes POL exit itself, it queues a fresh login without another close request. Restart verifies process identity, and successful login verifies the configured character and world.
+
+Known game maintenance pauses recovery. Support-center-only notices do not block game reconnection. Credential rejection, intentional shutdown, cancellation and disabling Maintain connection stop the applicable recovery actions. A hung window has a separate cleanup threshold: at least 90 continuous seconds without a rendering heartbeat or recent server traffic. Idle cards show **No process tracked**, with shutdown controls disabled when no process is running.
+
+Live testing verified the FFXI-4001/4002 → POL-0250 → fresh-login path on two accounts; all four test accounts ultimately had responsive sessions and fresh server traffic. Direct recovery through character selection and the hang-timeout path still need separate live trials. See [Windows troubleshooting](docs/WINDOWS-TROUBLESHOOTING.md#running-process-disconnect-recovery-1026) for validation scope and diagnostics.
 
 ## Versioning and releases
 
@@ -107,7 +121,7 @@ mkdir -p /tmp/ffxi-manager-addon-test/data
 lua tests/test_manager_addon.lua /tmp/ffxi-manager-addon-test/
 ```
 
-Automated checks cover configuration, identity, maintenance policies, IPC authentication/session binding, UI behavior and credential handling. Complete successful Windows login records account/profile/build validation; unattended recovery and scheduled downtime depend on that proof. Recognized login errors stop automation. The latest shutdown cancellation and early-input recovery changes still need live verification. Linux/SteamDeck launch automation and reliable extraction of saved POL account identities remain planned.
+Automated checks cover configuration, identity, maintenance policies, disconnect recognition and recovery guards, server-traffic freshness, IPC authentication/session binding, UI behavior and credential handling. Complete successful Windows login records account/profile/build validation; unattended recovery and scheduled downtime depend on that proof. Confirmed disconnects follow the recovery flow above; credential rejection pauses retries. Live shutdown-cancellation testing remains outstanding. Linux/SteamDeck launch automation and reliable extraction of saved POL account identities remain planned.
 
 If POL closes before its login screen, run this from the repository in Windows PowerShell, then try the usual launch during the 60-second observation:
 
