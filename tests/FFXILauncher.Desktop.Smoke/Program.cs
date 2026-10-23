@@ -86,6 +86,13 @@ if (args is ["--game-window-ready", var processId, var startedTicks, var executa
         request with { PressMs = 1 }, request with { Operation = "train-member", PressMs = 0 }, request with { Operation = "train-member", PollMs = 51 } })
         if (WindowsCalibrationControl.Accepts(invalid, token, now)) throw new Exception("Invalid calibration request accepted.");
     Console.WriteLine("PASS: calibration rejects foreign capabilities, unsafe operations, invalid identities, and stale/future requests before input.");
+    var flowInputs = new[] { new KeyValuePair<string, string>("login.cs", "first\r\nsecond"), new KeyValuePair<string, string>("ocr.ps1", "read") };
+    var sameInputs = new[] { new KeyValuePair<string, string>("ocr.ps1", "read"), new KeyValuePair<string, string>("login.cs", "first\nsecond") };
+    if (LoginFlowCompatibility.Fingerprint(flowInputs) != LoginFlowCompatibility.Fingerprint(sameInputs) ||
+        LoginFlowCompatibility.Fingerprint(flowInputs) == LoginFlowCompatibility.Fingerprint(sameInputs.Append(new("extra.cs", "input"))) ||
+        LoginFlowCompatibility.Fingerprint(flowInputs) == LoginFlowCompatibility.Fingerprint(sameInputs.Select(x => x.Key == "login.cs" ? new KeyValuePair<string, string>(x.Key, "changed") : x)) ||
+        LoginFlowCompatibility.Current.Length != 64)
+        throw new Exception("Login-source fingerprint must be deterministic across ordering/newlines and reject changed or added inputs.");
     if (OperatingSystem.IsWindows())
     {
         var root = Path.Combine(Path.GetTempPath(), "ffxi-validation-" + Guid.NewGuid());
@@ -101,17 +108,38 @@ if (args is ["--game-window-ready", var processId, var startedTicks, var executa
             }
             WindowsLoginValidation.Record(root, account);
             if (!WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Completed validation did not persist.");
-            foreach (var changed in new[] { account with { SquareEnixId = "OtherID" }, account with { Character = "Other" }, account with { World = "Odin" }, account with { Profile = "Other" }, account with { UsesOneTimePassword = true } })
+            foreach (var changed in new[] { account with { SquareEnixId = "OtherID" }, account with { Character = "Other" }, account with { World = "Odin" }, account with { Profile = "Other" }, account with { UsesOneTimePassword = true }, account with { Id = Guid.NewGuid() }, account with { PolPasswordStoredInPol = false }, account with { MemberPasswordRequired = true } })
                 if (WindowsLoginValidation.IsValidated(root, changed) || WindowsLoginValidation.HasPriorValidation(root, changed)) throw new Exception("Changed account mapping reused login validation.");
             var proofPath = Path.Combine(root, "login-validation", account.Id.ToString("N") + ".json");
             var proof = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(proofPath))!;
             proof["Build"] = Guid.NewGuid().ToString("N");
             File.WriteAllText(proofPath, proof.ToJsonString());
+            if (!WindowsLoginValidation.IsValidated(root, account))
+                throw new Exception("An unrelated build change invalidated unchanged login automation.");
+            proof["LoginFlow"] = new string('0', 64);
+            File.WriteAllText(proofPath, proof.ToJsonString());
             if (WindowsLoginValidation.IsValidated(root, account) || !WindowsLoginValidation.HasPriorValidation(root, account))
-                throw new Exception("A prior build proof must remain mapping-bound and cannot authorize ordinary unattended startup.");
+                throw new Exception("Changed login automation must require validation while preserving the confirmed-disconnect prior-proof route.");
+            proof.AsObject().Remove("LoginFlow");
+            File.WriteAllText(proofPath, proof.ToJsonString());
+            if (WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Unknown legacy build bypassed validation.");
+            foreach (var legacy in new[] { "eaa4e971ee0140869898d88ea901d5ad", "cf5fbeb42c504f57bbf3da94d0186a1c", "b8d01e8893f7413e92677bda379cd5d3" })
+            {
+                proof["Build"] = legacy;
+                File.WriteAllText(proofPath, proof.ToJsonString());
+                if (!WindowsLoginValidation.IsValidated(root, account) || WindowsLoginValidation.IsValidated(root, account with { Character = "Other" }))
+                    throw new Exception("Reviewed legacy flow must retain validation only for the exact account mapping.");
+                proof["LoginFlow"] = "mismatched-flow";
+                File.WriteAllText(proofPath, proof.ToJsonString());
+                if (WindowsLoginValidation.IsValidated(root, account)) throw new Exception("Legacy bridge overrode an explicit incompatible flow.");
+                proof.AsObject().Remove("LoginFlow");
+            }
+            proof["VerifiedUtc"] = DateTimeOffset.UtcNow.AddDays(1).ToString("o");
+            File.WriteAllText(proofPath, proof.ToJsonString());
+            if (WindowsLoginValidation.IsValidated(root, account) || WindowsLoginValidation.HasPriorValidation(root, account)) throw new Exception("Future validation accepted.");
             File.WriteAllText(Path.Combine(root, "login-validation", account.Id.ToString("N") + ".json"), "{}");
             if (WindowsLoginValidation.IsValidated(root, account) || WindowsLoginValidation.HasPriorValidation(root, account)) throw new Exception("Corrupt proof accepted.");
-            Console.WriteLine("PASS: validation persists only for the current automation build and account mapping; changed identities and corrupt proofs stay blocked.");
+            Console.WriteLine("PASS: login-source validation survives unrelated builds; changed flows/mappings, unknown legacy builds, future dates and corrupt proofs stay blocked.");
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }

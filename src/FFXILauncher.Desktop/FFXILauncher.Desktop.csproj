@@ -34,4 +34,20 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.2" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
   </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsLoginEngine.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsLoginEngine.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsLoginWindow.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsLoginWindow.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsAutoLogin.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsAutoLogin.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/LoginFocusRecovery.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/LoginFocusRecovery.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsInstallationDiscovery.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsInstallationDiscovery.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsCredentialVault.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsCredentialVault.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginCheckpoints.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginCheckpoints.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginControlCache.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginControlCache.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginTimingCache.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginTimingCache.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginTrainingLedger.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginTrainingLedger.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/ShutdownIpc.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/ShutdownIpc.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/Accounts.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/Accounts.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsSessionPlatform.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsSessionPlatform.cs" />
+  </ItemGroup>
 </Project>

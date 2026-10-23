@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.29
+
+- Preserve complete-login validation across app updates when the login implementation and account mapping are unchanged. Validation now uses a deterministic fingerprint of login, OCR, input, cache and profile-resolution sources instead of the assembly build ID; release notes, artwork, packaging and unrelated UI changes do not invalidate it.
+- Retain existing account/profile binding and credential requirements. Changes to fingerprinted login sources require a new complete login. Only explicitly reviewed legacy build IDs can bridge old proofs into the current baseline; unknown builds and explicit incompatible fingerprints stay blocked.
+
 ## 1.0.28
 
 - Complete in-place disconnect recovery through character confirmation and verified world entry. The recovery route no longer stops at the character-selection checkpoint used by explicit menu calibration.

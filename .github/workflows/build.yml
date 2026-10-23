@@ -45,6 +45,12 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'Standalone package check failed.' }
           $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
           if (-not $result.Standalone -or -not $result.NativeImageDecoded -or -not $result.InstallerPrepared -or -not $result.LicensesAvailable -or $result.SupportFilesVerified -lt 10 -or $result.ArtworkThemesVerified -ne 12) { throw 'Standalone package is incomplete.' }
+          $folderResultPath = Join-Path $env:RUNNER_TEMP 'folder-check.json'
+          $folderExe = (Resolve-Path 'artifacts/windows-x64/FFXILauncher.Desktop.exe').Path
+          $folderProcess = Start-Process -FilePath $folderExe -ArgumentList ('--package-check "' + $folderResultPath + '"') -Wait -PassThru
+          if ($folderProcess.ExitCode -ne 0) { throw 'Folder package check failed.' }
+          $folderResult = Get-Content -LiteralPath $folderResultPath -Raw | ConvertFrom-Json
+          if ($result.LoginFlowFingerprint -notmatch '^[A-F0-9]{64}$' -or $result.LoginFlowFingerprint -cne $folderResult.LoginFlowFingerprint) { throw 'Packaging changed login-flow compatibility.' }
       - uses: actions/upload-artifact@v4
         with:
           name: ffxi-account-manager-windows-x64

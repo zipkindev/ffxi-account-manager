@@ -98,6 +98,6 @@ internal static class AppPayload
         var installSource = InstallSource();
         return new { Version = AppRelease.Version, Standalone, SupportFilesVerified = count, ArtworkThemesVerified = artworkThemesVerified, NativeImageDecoded = nativeImageDecoded,
             InstallerPrepared = System.IO.File.Exists(Path.Combine(installSource, "FFXILauncher.Desktop.exe")),
-            LicensesAvailable = AppRelease.Licenses.Contains("MIT License"), BuildIdentity };
+            LicensesAvailable = AppRelease.Licenses.Contains("MIT License"), BuildIdentity, LoginFlowFingerprint = Platform.LoginFlowCompatibility.Current };
     }
 }
