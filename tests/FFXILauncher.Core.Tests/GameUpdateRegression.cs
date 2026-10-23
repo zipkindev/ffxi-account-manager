@@ -7,6 +7,8 @@ internal static class GameUpdateRegression
         static LoginFrame Frame(params string[] text) => new(640,480,text.Select((t,i)=>new OcrLine(t,[new(t,320,160+i*30,100,20)])).ToArray());
         var available=Frame("Version Update","A version update is necessary.","Update","Cancel");
         var start=GameUpdateWorkflow.Recognize(available);
+        check(GameUpdateWorkflow.Recognize(Frame("Version Update","Update","Cancel")).Button=="Update","official updater heading and exact Update control work with partial body OCR");
+        check(GameUpdateWorkflow.Recognize(Frame("Version Update","Update complete.","OK")).Stage==GameUpdateStage.Complete,"explicit compact update completion permits OK");
         check(start.Stage==GameUpdateStage.Available && start.Button=="Update","updater requires version heading and explicit available wording");
         check(GameUpdateWorkflow.Recognize(Frame("Next","OK","Update")).Stage==GameUpdateStage.None,"generic updater controls authorize nothing");
         check(GameUpdateWorkflow.Recognize(Frame("Latest version update news","A new version is available","Update")).Stage==GameUpdateStage.None,"news does not authorize updater input");

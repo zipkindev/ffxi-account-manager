@@ -26,7 +26,7 @@ public sealed class GameUpdateWorkflow
         if (frame.Has("File Repair") || frame.Has("Uninstall")) return new(GameUpdateStage.Error);
         if (frame.Has("restart PlayOnline") || frame.Has("restart the PlayOnline Viewer") || frame.Has("restart your computer")) return new(GameUpdateStage.RestartRequired);
         string? Button(params string[] labels) => labels.FirstOrDefault(label => Control(frame, label) != null);
-        if (frame.Has("version update is complete") || frame.Has("version update has been completed") || frame.Has("version update complete") || frame.Has("update completed"))
+        if (frame.Has("version update is complete") || frame.Has("version update has been completed") || frame.Has("version update complete") || frame.Has("update completed") || frame.Has("version update was completed") || frame.Lines.Any(l => LoginFrame.Normalize(l.Text) == "updatecomplete"))
             return new(GameUpdateStage.Complete, Button("Next", "OK", "Play"));
         if ((frame.Has("Do you wish to begin the version update") || frame.Has("Do you want to start the version update")) && Control(frame, "No") != null)
             return new(GameUpdateStage.Confirmation, Button("Yes"));
@@ -34,7 +34,7 @@ public sealed class GameUpdateWorkflow
         if (frame.Has("Downloading")) return new(GameUpdateStage.Downloading, Progress: progress);
         if (frame.Has("Installing") || frame.Has("Updating files")) return new(GameUpdateStage.Installing, Progress: progress);
         if (frame.Has("Checking files") || frame.Has("Checking file") || frame.Has("Checking version")) return new(GameUpdateStage.Checking, Progress: progress);
-        if (frame.Has("version update is necessary") || frame.Has("version update is required") || frame.Has("new version is available"))
+        if (frame.Has("version update is necessary") || frame.Has("version update is required") || frame.Has("new version is available") || Control(frame, "Update") != null)
             return new(GameUpdateStage.Available, Button("Update", "Next"));
         return new(GameUpdateStage.None);
     }
