@@ -1,5 +1,12 @@
 # Release notes
 
+## 1.0.27
+
+- Publish and check connection reports every 30 seconds while stats remain on their 60-second cadence. Inspect the screen only on the third consecutive missed or unhealthy connection check; each healthy, advancing report resets the count. Recheck reports before taking focus, preventing a transient file-read miss from immediately triggering OCR.
+- Allow quiet packet intervals up to 90 seconds within a current report. Passive counters distinguish original packets filtered by other addons from unfiltered packets; no packet contents are stored and no extra server requests are generated.
+- After an inspection finds no disconnect, defer further checks for five minutes while the same condition persists. Incoming server traffic resets the delay. Activity explains the reason for an inspection and its result.
+- Count original incoming server packets as connection activity even when another addon blocks their game processing. Injected packets still cannot claim server liveness; blocked packet contents are not parsed for stats or maintenance.
+
 ## 1.0.26
 
 - Maintain connection checks running POL sessions for confirmed POL-0250 and FFXI-4001/4002 disconnect dialogs. It dismisses the first dialog and tries the existing character-selection route; a further confirmed error closes only that tracked process and queues a fresh login.

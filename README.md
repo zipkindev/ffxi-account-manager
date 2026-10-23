@@ -50,7 +50,7 @@ Character stats, jobs and weather report once per minute. Master level comes fro
 
 Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). The standalone `.exe` needs no ZIP extraction or separate .NET installation. A folder ZIP is also available; extract its entire contents before launching it. The self-contained build does not require a separate .NET installation.
 
-The **1.0.26 disconnect-recovery fix** passed CI; its Windows folder package and standalone executable are available from the [validated 1.0.26 build](https://github.com/zipkindev/ffxi-account-manager/actions/runs/39915030733).
+The latest **1.0.27** fix prevents unnecessary focus changes during quiet, healthy connections. Windows folder packages and standalone executables are built by the [main build workflow](https://github.com/zipkindev/ffxi-account-manager/actions/workflows/build.yml?query=branch%3Amain).
 
 You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
 
@@ -70,11 +70,13 @@ After an addon update, use `//lua reload FFXIManager` in each running game. Futu
 
 Account metadata is saved under `%LOCALAPPDATA%\FFXILauncher\accounts.json`, and passwords under `vault/`, encrypted with Windows DPAPI for the current Windows user. Do not commit local account data, vaults or addon control files. These paths and local build/agent artifacts are excluded by `.gitignore`.
 
-## Connection recovery in 1.0.26
+## Connection recovery
 
 Enable **Auto login** and **Maintain connection** for each account you want recovered, complete its Windows login validation, and leave the manager open. The companion addon must be loaded for server-traffic reporting. Reload it after an update using `//lua reload FFXIManager`; fresh game launches load the updated addon automatically.
 
-Screen checks follow connection evidence. Recent incoming server packets suppress OCR entirely. If the last packet is over 30 seconds old, or packet telemetry is unavailable, the manager can inspect a responsive tracked window, at most once per minute while that condition persists. The addon's rendering heartbeat is tracked separately because an error screen can keep rendering after the connection has failed. Missing or stale traffic alone never authorizes force close.
+Screen checks follow connection evidence. In **1.0.27**, connection reports are published and checked **every 30 seconds**; stats stay on their **60-second** cadence. The first two missed or unhealthy checks leave the window alone. **The third consecutive failure** permits a fresh report recheck and OCR; any healthy, advancing report resets the failure count. Current reports tolerate quiet packet intervals of up to 90 seconds, so the observed healthy 61-second gap does not trigger OCR. A single missing heartbeat or brief file-read gap also does not qualify. If no disconnect dialog is found, further checks wait five minutes while the same condition persists; fresh traffic resets that delay. Activity explains why an inspection ran and what it found.
+
+The addon passively observes existing incoming packets; packet events only update in-memory timestamps/counters until the next connection report. The manager reads local status files without requesting extra server traffic. The existing rendering heartbeat and command acknowledgements remain separate for login/shutdown controls, because an error screen can keep rendering after the connection has failed. Injected packets do not count as server activity. An original server packet still counts as received if another addon blocks its game processing. Missing or stale traffic alone never authorizes force close.
 
 Recovery requires two matching reads of **FFXI-4001**, **FFXI-4002** or **POL-0250**, with the corresponding disconnect wording verified before pressing OK. It acknowledges the initial dialog and tries to return through character selection. If a further confirmed error prevents reconnection, it closes only that account's tracked process and queues a fresh login. If acknowledging the disconnect makes POL exit itself, it queues a fresh login without another close request. Restart verifies process identity, and successful login verifies the configured character and world.
 

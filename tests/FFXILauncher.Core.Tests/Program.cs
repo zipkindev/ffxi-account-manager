@@ -526,13 +526,22 @@ var trafficDirectory = Path.Combine(Path.GetTempPath(), "ffxi-traffic-" + Guid.N
 Directory.CreateDirectory(trafficDirectory);
 try
 {
-    var now = DateTimeOffset.UtcNow;
+    var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
     var session = new GameSession(new string('a', 32), scheduled.Character, scheduled.World, now.AddHours(-1), now);
     var path = Path.Combine(trafficDirectory, scheduled.World.ToLowerInvariant() + "_" + scheduled.Character.ToLowerInvariant() + ".connection");
-    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "an older addon without traffic telemetry falls back to screen inspection");
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "missing packet telemetry remains unknown until the inspection gate confirms sustained loss");
     void Traffic(DateTimeOffset incoming) => File.WriteAllText(path, $"{session.Nonce}\n{session.Character}\n{session.World}\n{session.RegisteredUtc.ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n{incoming.ToUnixTimeSeconds()}\n");
     Traffic(now.AddSeconds(-1));
     Check(ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "fresh server traffic protects a matching connected session");
+    File.AppendAllText(path, "0\n0\n0\n0\n");
+    Check(ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "current ten-line diagnostic reports retain the same identity and liveness guards as legacy reports");
+    Traffic(now.AddSeconds(-61));
+    Check(ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "the observed healthy sixty-one-second quiet interval does not request OCR");
+    Traffic(now.AddSeconds(-90));
+    Check(ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "the ninety-second traffic boundary remains protected");
+    Traffic(now.AddSeconds(-91));
+    Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "traffic beyond ninety seconds enters sustained-loss observation");
+    Traffic(now.AddSeconds(-1));
     Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session with { Nonce = new string('b', 32) }, now), "a replaced addon session cannot inherit prior server activity");
     Traffic(now.AddMinutes(-2));
     Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "rendering heartbeats cannot hide stale server traffic");
@@ -540,6 +549,42 @@ try
     Check(!ServerTraffic.IsRecent(trafficDirectory, scheduled, session, now), "future traffic timestamps cannot suppress recovery inspection");
 }
 finally { Directory.Delete(trafficDirectory, true); }
+{
+    var now = DateTimeOffset.UtcNow;
+    var process = new ManagedProcess(1234, now.UtcDateTime);
+    var gate = new ConnectionInspectionGate();
+    var quietSessionInspected = false;
+    // Replay the measured one-minute packet cadence, including a missed file
+    // publication. A rendering heartbeat alone is never used as network proof.
+    for (var seconds = 0; seconds <= 240; seconds += 30)
+    {
+        var incoming = now.AddSeconds(seconds / 62 * 62);
+        var report = seconds == 90 ? null : new ServerTrafficSample(now.AddSeconds(seconds), incoming);
+        quietSessionInspected |= gate.Observe(process, report, now.AddSeconds(seconds));
+    }
+    Check(!quietSessionInspected, "quiet healthy packet intervals and a missed telemetry read never authorize foreground OCR");
+    var loss = now.AddMinutes(5);
+    gate.Observe(process, new(loss, loss), loss);
+    Check(!gate.Observe(process, null, loss.AddSeconds(30)) && !gate.Observe(process, null, loss.AddSeconds(59)) &&
+        !gate.Observe(process, null, loss.AddSeconds(60)) && gate.Observe(process, null, loss.AddSeconds(90)),
+        "three missed thirty-second reports are required; rapid retries cannot double-count a miss");
+    Check(!gate.Observe(process, new(loss.AddSeconds(91), loss.AddSeconds(91)), loss.AddSeconds(91)) &&
+        !gate.Observe(process, null, loss.AddSeconds(121)),
+        "a healthy report resets pending inspection instead of accumulating intermittent misses");
+    var repeated = new ServerTrafficSample(loss, loss);
+    gate.Forget(process);
+    Check(!gate.Observe(process, repeated, loss) && !gate.Observe(process, repeated, loss.AddSeconds(30)) &&
+        !gate.Observe(process, repeated, loss.AddSeconds(60)) && gate.Observe(process, repeated, loss.AddSeconds(90)),
+        "an unchanged cached report cannot count as a new connection heartbeat");
+    Check(!gate.Observe(process with { StartedUtc = process.StartedUtc.AddMinutes(1) }, null, loss.AddMinutes(1)),
+        "a reused PID with a new creation time cannot inherit inspection suspicion");
+    gate.Forget(process);
+    Check(!gate.Observe(process, null, loss.AddMinutes(1)), "forgetting a stopped process clears its inspection delay");
+    Check(!gate.Observe(process, null, now), "clock rollback restarts the observation period");
+    gate.Forget(process);
+    var reads = Enumerable.Range(0, 60).Count(seconds => gate.ShouldRead(process, now.AddSeconds(seconds)));
+    Check(reads == 2, "routine connection telemetry is read twice a minute instead of on every dashboard tick");
+}
 Check(LoginCheckpoints.MaintenanceErrorCode(LoginScreen("Error code", "Generic problem")) == null, "generic error text cannot authorize forced maintenance cleanup");
 Check(LoginCheckpoints.MaintenanceErrorCode(maintenanceErrorFrame with { Lines = [new("Error code:FFXI-3001", [new("FFXI-3001", 70, 440, 95, 16)])] }) == null,
     "a code appearing in the chat footer cannot authorize forced maintenance cleanup");

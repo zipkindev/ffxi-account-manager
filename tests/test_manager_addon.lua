@@ -31,14 +31,20 @@ assert(read('odin_hauplibond.state'), 'addon publishes immediately when loaded i
 events.prerender()
 local status = assert(read('odin_hauplibond.status'))
 local session = status:match('^([^\n]+)')
-assert(read('odin_hauplibond.connection'):match('\n0\n$'), 'render heartbeat alone must not claim server traffic')
+local function connection()
+    local values = {}
+    for value in read('odin_hauplibond.connection'):gmatch('([^\n]*)\n') do values[#values + 1] = value end
+    return values
+end
+assert(connection()[6] == '0', 'render heartbeat alone must not claim server traffic')
+local initial_connection = read('odin_hauplibond.connection')
 events['incoming chunk'](0x00A, '', nil, true, false)
 now = now + 1; events.prerender()
-assert(read('odin_hauplibond.connection'):match('\n0\n$'), 'injected packets cannot refresh server liveness')
+assert(connection()[6] == '0', 'injected packets cannot refresh server liveness')
 events['incoming chunk'](0x00A, '', nil, false, false)
 local incoming_at = now
 now = now + 1; events.prerender()
-assert(read('odin_hauplibond.connection'):match('\n' .. incoming_at .. '\n$'), 'real incoming packets refresh separate connection liveness')
+assert(read('odin_hauplibond.connection') == initial_connection, 'passive packet receipt does not write connection files every second')
 assert(status:match('\nHauplibond\nOdin\n'), 'heartbeat must carry character and world')
 assert(read('odin_hauplibond.environment'):find('\n100\nRain\n1184\nFiresday\nWaxing Crescent\n25\n', 1, true), 'zone environment reports game weather, time, day and moon')
 assert(read('odin_hauplibond.jobs'):find('\n46\nDRK\n99\nWAR\n57\n', 1, true), 'jobs report includes cached master level and actual subjob level')
@@ -163,5 +169,18 @@ player.status, player.vitals.hp = 0, 1500
 now = now + 1
 events['status change']()
 assert(read('odin_hauplibond.state'):find('1500\n1500\n500\n500\n0\n100\n', 1, true), 'revival reports immediately instead of waiting a minute')
+events['incoming chunk'](0x061, {['Main Job'] = 8, ['Master Level'] = 49}, nil, false, true)
+local blocked_incoming_at = now
+local prior_connection = read('odin_hauplibond.connection')
+now = now + 1; events.prerender()
+assert(read('odin_hauplibond.connection') == prior_connection, 'routine connection reports wait thirty seconds between publications')
+now = now + 30; events.prerender()
+assert(connection()[6] == tostring(blocked_incoming_at), 'a genuine server packet blocked by another addon still proves network receipt')
+assert(connection()[8] == tostring(blocked_incoming_at) and tonumber(connection()[10]) == 1, 'diagnostic counters distinguish filtered originals without storing packet contents')
+events['status change']()
+assert(not read('odin_hauplibond.jobs'):find('\n49\nDRK\n', 1, true), 'blocked packet contents cannot alter player statistics')
+events['incoming chunk'](0x00A, '', nil, true, false)
+now = now + 30; events.prerender()
+assert(connection()[6] == tostring(blocked_incoming_at), 'injected packets cannot refresh liveness on the next scheduled publication')
 os.time = old_time
 print('PASS: addon authentication, session binding, expiry, allowlist, at-most-once shutdown, and logout cleanup')

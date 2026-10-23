@@ -39,6 +39,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<Guid, MaintenanceWindow> maintenanceRestarts = [];
     private readonly Dictionary<Guid, DateTimeOffset> nextMaintenanceInspection = [];
     private readonly Dictionary<ManagedProcess, DateTimeOffset> nextConnectionInspection = [];
+    private readonly ConnectionInspectionGate connectionInspectionGate = new();
     private readonly Dictionary<ManagedProcess, DateTimeOffset> unresponsiveSince = [];
     private readonly HashSet<Guid> disconnectRestarts = [];
     private readonly HashSet<Guid> connectionChecks = [];
@@ -1321,18 +1322,22 @@ public sealed partial class MainWindow : Window
     {
         if (autoLogin is not WindowsAutoLogin windows || windows.SetupProblem(account) != null || AddonDataDirectory is not {} data) return false;
         var now = DateTimeOffset.UtcNow;
+        if (!connectionInspectionGate.ShouldRead(process, now)) return false;
         if (nextRetry.TryGetValue(account.Id, out var retryAfter) && now < retryAfter) return false;
         var health = platform.Inspect(process);
-        if (health is not (SessionHealth.Responsive or SessionHealth.Unresponsive)) return false;
+        if (health is not (SessionHealth.Responsive or SessionHealth.Unresponsive))
+        { connectionInspectionGate.Forget(process); return false; }
         var heartbeat = new ShutdownIpc(data).ReadSession(account, now);
         if (heartbeat != null && heartbeat.RegisteredUtc < process.StartedUtc.AddSeconds(-2)) heartbeat = null;
-        var recentTraffic = ServerTraffic.IsRecent(data, account, heartbeat, now);
-        if (recentTraffic) connectionStates.Remove(account.Id);
+        var traffic = ServerTraffic.Read(data, account, heartbeat, now);
+        var recentTraffic = traffic?.IsRecent(now) == true;
+        var inspectionDue = connectionInspectionGate.Observe(process, traffic, now);
+        if (recentTraffic) { connectionStates.Remove(account.Id); nextConnectionInspection.Remove(process); }
         if (health == SessionHealth.Unresponsive && heartbeat == null && !recentTraffic) unresponsiveSince.TryAdd(process, now);
         else unresponsiveSince.Remove(process);
         var hung = DisconnectRecovery.CanCloseHung(account, intentionallyStopped.Contains(account.Id), health,
             unresponsiveSince.TryGetValue(process, out var since) ? since : null, now, heartbeat != null, recentTraffic);
-        if (!hung && (health != SessionHealth.Responsive || recentTraffic ||
+        if (!hung && (health != SessionHealth.Responsive || !inspectionDue ||
             nextConnectionInspection.TryGetValue(process, out var next) && now < next)) return false;
         nextConnectionInspection[process] = now.AddSeconds(60);
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token);
@@ -1344,8 +1349,25 @@ public sealed partial class MainWindow : Window
         {
             if (!hung)
             {
+                // Recheck after another addon publication before focusing a game.
+                await Task.Delay(1000, cancellation.Token);
+                var checkTime = DateTimeOffset.UtcNow;
+                heartbeat = new ShutdownIpc(data).ReadSession(account, checkTime);
+                if (heartbeat != null && heartbeat.RegisteredUtc < process.StartedUtc.AddSeconds(-2)) heartbeat = null;
+                traffic = ServerTraffic.Read(data, account, heartbeat, checkTime);
+                if (traffic?.IsRecent(checkTime) == true)
+                { connectionInspectionGate.Observe(process, traffic, checkTime); nextConnectionInspection.Remove(process); return false; }
+                Log(account.Label + (traffic == null
+                    ? ": checking for a disconnect after three missed connection reports."
+                    : ": checking for a disconnect after " + (int)(checkTime - traffic.LastIncomingUtc).TotalSeconds + " seconds without server traffic."));
                 await windows.RequestAsync(account, process, true, cancellation.Token);
                 var code = windows.LastInspectionErrorCode;
+                if (!DisconnectRecovery.IsDisconnectCode(code))
+                {
+                    nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(5);
+                    Log(account.Label + ": no disconnect dialog found; the session was left running. Screen checks deferred while the same condition persists.");
+                    return false;
+                }
                 var latest = configuration.ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
                 if (latest == null || !DisconnectRecovery.CanRestart(latest, intentionallyStopped.Contains(account.Id), windows.LastInspectionCredentialRejected, code) ||
                     !sessions.TryGetValue(account.Id, out var tracked) || tracked != process) return false;

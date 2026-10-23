@@ -17,24 +17,62 @@ public static class DisconnectRecovery
 }
 
 // Separate from the rendering heartbeat: a disconnect dialog can keep rendering.
+public sealed record ServerTrafficSample(DateTimeOffset ReportedUtc, DateTimeOffset LastIncomingUtc)
+{
+    // Quiet sessions can legitimately report chunks about a minute apart.
+    public bool IsRecent(DateTimeOffset now) => ReportedUtc <= now.AddSeconds(3) &&
+        now - ReportedUtc <= TimeSpan.FromSeconds(45) && ReportedUtc - LastIncomingUtc <= TimeSpan.FromSeconds(90);
+}
+
+// Missing files during the addon's replace operation must not steal focus.
+// Any healthy sample resets suspicion; process replacement starts a new wait.
+public sealed class ConnectionInspectionGate
+{
+    private sealed record Observation(DateTimeOffset CheckedUtc, DateTimeOffset? ReportedUtc, int Misses);
+    private readonly Dictionary<ManagedProcess, Observation> observations = [];
+    private readonly Dictionary<ManagedProcess, DateTimeOffset> nextRead = [];
+    public bool ShouldRead(ManagedProcess process, DateTimeOffset now)
+    {
+        if (nextRead.TryGetValue(process, out var next) && now < next && next - now <= TimeSpan.FromSeconds(30)) return false;
+        nextRead[process] = now.AddSeconds(30);
+        return true;
+    }
+    public bool Observe(ManagedProcess process, ServerTrafficSample? traffic, DateTimeOffset now)
+    {
+        var known = observations.TryGetValue(process, out var previous);
+        if (traffic?.IsRecent(now) == true && (!known || previous!.ReportedUtc == null || traffic.ReportedUtc > previous.ReportedUtc))
+        { observations[process] = new(now, traffic.ReportedUtc, 0); return false; }
+        if (!known || now < previous!.CheckedUtc)
+        { observations[process] = new(now, traffic?.ReportedUtc, 0); return false; }
+        if (now - previous.CheckedUtc < TimeSpan.FromSeconds(30)) return false;
+        var misses = Math.Min(3, previous.Misses + 1);
+        observations[process] = new(now, traffic?.ReportedUtc ?? previous.ReportedUtc, misses);
+        return misses >= 3;
+    }
+    public void Forget(ManagedProcess process) { observations.Remove(process); nextRead.Remove(process); }
+}
+
 public static class ServerTraffic
 {
-    public static bool IsRecent(string directory, AccountConfiguration account, GameSession? session, DateTimeOffset now)
+    public static bool IsRecent(string directory, AccountConfiguration account, GameSession? session, DateTimeOffset now) =>
+        Read(directory, account, session, now)?.IsRecent(now) == true;
+    public static ServerTrafficSample? Read(string directory, AccountConfiguration account, GameSession? session, DateTimeOffset now)
     {
-        if (session == null) return false;
+        if (session == null) return null;
         try
         {
             var path = Path.Combine(directory, ShutdownIpc.Stem(account) + ".connection");
-            if (!File.Exists(path) || new FileInfo(path).Length > 4096) return false;
+            if (!File.Exists(path) || new FileInfo(path).Length > 4096) return null;
             var lines = File.ReadAllLines(path);
-            if (lines.Length != 6 || lines[0] != session.Nonce ||
+            if (lines.Length is not (6 or 10) || lines[0] != session.Nonce ||
                 !lines[1].Equals(account.Character, StringComparison.OrdinalIgnoreCase) || !lines[2].Equals(account.World, StringComparison.OrdinalIgnoreCase) ||
-                !long.TryParse(lines[3], out var registered) || !long.TryParse(lines[4], out var reported) || !long.TryParse(lines[5], out var incoming)) return false;
+                !long.TryParse(lines[3], out var registered) || !long.TryParse(lines[4], out var reported) || !long.TryParse(lines[5], out var incoming)) return null;
             var reportTime = DateTimeOffset.FromUnixTimeSeconds(reported);
             var incomingTime = DateTimeOffset.FromUnixTimeSeconds(incoming);
             return registered == session.RegisteredUtc.ToUnixTimeSeconds() && incoming >= registered && incoming <= reported &&
-                reportTime <= now.AddSeconds(3) && now - reportTime <= TimeSpan.FromSeconds(10) && now - incomingTime <= TimeSpan.FromSeconds(30);
+                reportTime <= now.AddSeconds(3) && now - reportTime <= TimeSpan.FromSeconds(45)
+                    ? new(reportTime, incomingTime) : null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return false; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return null; }
     }
 }

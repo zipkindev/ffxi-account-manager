@@ -1,6 +1,6 @@
 _addon.name = 'FFXIManager'
 _addon.author = 'FFXI Account Manager'
-_addon.version = '0.3.7'
+_addon.version = '0.3.8'
 _addon.commands = {'ffximanager'}
 local resources = require('resources')
 local packets = require('packets')
@@ -9,6 +9,8 @@ local session = tostring(os.time()) .. '_' .. tostring({}):gsub('[^0-9a-f]', '')
 local registered = os.time()
 local last_poll = 0
 local last_incoming = 0
+local last_connection_report = nil
+local last_unblocked, last_blocked, unblocked_count, blocked_count = 0, 0, 0, 0
 local last_report = nil
 local startup_followup_at = nil
 local master = nil
@@ -107,7 +109,11 @@ local function poll()
     if not character then return end
     stem = world:lower() .. '_' .. character:lower()
     write(root .. stem .. '.status', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. now .. '\n')
-    write(root .. stem .. '.connection', session .. '\n' .. character .. '\n' .. world .. '\n' .. registered .. '\n' .. now .. '\n' .. last_incoming .. '\n')
+    if not last_connection_report or now - last_connection_report >= 30 then
+        write(root .. stem .. '.connection', table.concat({session, character, world, registered, now, last_incoming,
+            last_unblocked, last_blocked, unblocked_count, blocked_count}, '\n') .. '\n')
+        last_connection_report = now
+    end
     -- Stats and environment are sampled once per minute. Keep control polling
     -- and the lightweight health heartbeat independent of display reporting.
     if not last_report then startup_followup_at = now + 15 end
@@ -168,6 +174,7 @@ local function report_change()
     last_report = now
 end
 local function startup_report()
+    last_connection_report = nil
     last_report = nil
     startup_followup_at = nil
     last_poll = 0
@@ -189,6 +196,7 @@ windower.register_event('logout', function()
     last_report = nil
     startup_followup_at = nil
     master = nil
+    last_connection_report = nil
     shutdown_pending_until = 0
     stem = nil
     registered = os.time()
@@ -198,8 +206,16 @@ windower.register_event('unload', clear)
 
 -- Observe original server system messages only; never persist player chat or injected packets.
 windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
-    if injected or blocked then return end
+    if injected then return end
+    -- A real server chunk still proves receipt when another addon filters it.
     last_incoming = os.time()
+    if blocked then
+        last_blocked = last_incoming
+        blocked_count = blocked_count + 1
+        return
+    end
+    last_unblocked = last_incoming
+    unblocked_count = unblocked_count + 1
     if id == 0x061 then capture_master(original); return end
     if id ~= 0x017 then return end
     local ok, packet = pcall(packets.parse, 'incoming', original)
