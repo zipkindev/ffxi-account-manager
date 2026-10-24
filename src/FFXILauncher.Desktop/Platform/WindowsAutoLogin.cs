@@ -7,7 +7,7 @@ using FFXILauncher.Core;
 
 namespace FFXILauncher.Desktop.Platform;
 
-internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0, bool RecoverDisconnect = false);
+internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0, bool RecoverDisconnect = false, bool UserInitiated = false);
 internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false, string? ConfirmedErrorCode = null, bool NeedsFreshRestart = false, bool ConnectionRecovered = false, bool ExternalSessionConflict = false);
 
 public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomation, IDisposable
@@ -31,6 +31,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
         if (requested && recovered == restartRequired)
             throw new LoginSafetyException("Disconnect recovery stopped before a verified world entry or fresh restart was established.");
     }
+    internal static string? ExternalPauseProblem(AccountConfiguration account, bool userInitiated) => userInitiated ? null : account.RecoveryPauseReason;
     public string? SetupProblem(AccountConfiguration account) => LoginCheckpoints.Requirements(account) ??
         (!WindowsUnattendedSetup.IsElevated ? "Start the manager using its unattended desktop shortcut." : null);
     public string? ReadinessProblem(AccountConfiguration account) => account.RecoveryPauseReason ?? SetupProblem(account) ??
@@ -40,7 +41,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
         if (ReadinessProblem(account) is {} problem) throw new InvalidOperationException(problem);
         await RequestAsync(account, process, false, cancellationToken);
     }
-    internal async Task<bool> RequestAsync(AccountConfiguration account, ManagedProcess process, bool inspect, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0, bool recoverDisconnect = false)
+    internal async Task<bool> RequestAsync(AccountConfiguration account, ManagedProcess process, bool inspect, CancellationToken cancellation, bool memberSectionOnly = false, int pressMs = 80, int pollMs = 50, string trainingSection = "", int menuGapMs = 0, bool recoverDisconnect = false, bool userInitiated = false)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         var canonical = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher");
@@ -60,7 +61,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
             LastConnectionRecovered = false;
             var duration = !inspect && !memberSectionOnly && trainingSection == "" && !recoverDisconnect ? GameUpdateWorkflow.MaximumLoginDuration : TimeSpan.FromMinutes(8);
             var deadline = DateTimeOffset.UtcNow + duration;
-            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, deadline, inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, recoverDisconnect));
+            WriteJson(Path.Combine(sessionDirectory!, "request.json"), new LoginRequest(token!, nonce, account.Id, process, deadline, inspect, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, recoverDisconnect, userInitiated));
             string? stage = null;
             while (DateTimeOffset.UtcNow < deadline)
             {
@@ -251,7 +252,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                         var config = new ConfigurationStore(root).Load(); var account = config.ConfiguredAccounts.Single(a => a.Id == request.Account);
                         if ((request.RecoverDisconnect || request.TrainingSection == "clear-panel") && (!account.MaintainConnection || !account.AutoLoginEnabled))
                             throw new LoginSafetyException("Maintain connection was disabled; recovery cancelled.");
-                        if (!request.InspectOnly && request.TrainingSection != "external-exit" && account.RecoveryPauseReason is {} pausedReason)
+                        if (!request.InspectOnly && request.TrainingSection != "external-exit" && ExternalPauseProblem(account, request.UserInitiated && !request.RecoverDisconnect) is {} pausedReason)
                             throw new LoginSafetyException(pausedReason);
                         var engine = new WindowsLoginEngine(directory, config, account, request.Process, Report);
                         engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs, request.RecoverDisconnect).GetAwaiter().GetResult();

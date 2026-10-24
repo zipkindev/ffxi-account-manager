@@ -2,7 +2,7 @@
 
 ## 1.0.32
 
-- On two matching POL-1039 other-terminal messages, save Maintain connection Off before acknowledging OK and closing only the affected local POL process. Show the error code and reason on the account card across app restarts; only explicitly re-enabling Maintain connection clears it. Keep FFXI-3201 on its separate timed retry path.
+- On two matching POL-1039 other-terminal messages, save Maintain connection Off before acknowledging OK and closing only the affected local POL process. Show the error code and reason on the account card across app restarts; only explicitly re-enabling Maintain connection clears it. Manual Launch profile can override the pause through a Launch anyway warning while Maintain connection stays off. Keep FFXI-3201 on its separate timed retry path.
 
 - Detect specific disconnect dialogs when addon panels obscure the “Error code” label. Require a bounded exact numeric code and matching failure wording; reject conflicting codes and footer-only text.
 - Recover FFXI-3100 lobby failures and confirmed POL-0512 terminated-session errors through the existing confirmed-dialog and character-selection route.

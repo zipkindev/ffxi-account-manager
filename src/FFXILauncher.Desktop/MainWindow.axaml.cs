@@ -742,7 +742,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex) { Log("Could not save account: " + ex.Message); }
     }
-    private string? ManualLoginProblem(AccountConfiguration account) => account.RecoveryPauseReason ??
+    private string? ManualLoginProblem(AccountConfiguration account) =>
         (autoLogin is WindowsAutoLogin windows ? windows.SetupProblem(account) : autoLogin.ReadinessProblem(account)) ??
         (!vault.Contains(account.Id) ? "Save this account's Square Enix password first." : null);
     private bool LoginOperationActive => batchLaunching || accountCancellation.Count > 0 || pending.Count > 0 || shuttingDown.Count > 0 || shutdownCancelling.Count > 0 || forceClosing.Count > 0;
@@ -796,7 +796,7 @@ public sealed partial class MainWindow : Window
                 if (!decision.Allowed) return new(false, decision.Reason);
                 if (InGameMaintenance.Hold(GameAlerts(account), maintenance.Snapshot, DateTimeOffset.UtcNow) is {} hold) return new(false, hold.Reason);
             }
-            var full = await login.RequestAsync(account, process, inspect, cancelled.Token, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs);
+            var full = await login.RequestAsync(account, process, inspect, cancelled.Token, memberSectionOnly, pressMs, pollMs, trainingSection, menuGapMs, userInitiated: !inspect);
             if (inspect && calibrationControl != null) File.Copy(login.CapturePath!, calibrationControl.CapturePath, true);
             if (!inspect)
             {
@@ -981,7 +981,7 @@ public sealed partial class MainWindow : Window
         if (pending.Count > 0) { Log("Another profile is launching. Wait for it to finish."); return; }
         if (!pending.Add(id)) return;
         var account = configuration.ConfiguredAccounts.Single(a => a.Id == id);
-        if (account.RecoveryPauseReason is {} pausedReason) { pending.Remove(id); Log(account.Label + ": " + pausedReason); return; }
+        if (account.RecoveryPauseReason is {} pausedReason) Log(account.Label + ": manual launch requested. " + pausedReason);
         if (sessions.Keys.Any(other => other != id && configuration.ConfiguredAccounts.Any(a => a.Id == other && AccountIdentity.Conflicts(account, a)) &&
             platform.Inspect(sessions[other]) != SessionHealth.Exited))
         { pending.Remove(id); Log("This POL account or character already has a tracked session."); return; }
@@ -1154,7 +1154,7 @@ public sealed partial class MainWindow : Window
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || !account.AutoLoginEnabled || intentionallyStopped.Contains(id)) continue;
                 var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated: true);
-                if (!decision.Allowed || ManualLoginProblem(account) != null || !vault.Contains(id)) continue;
+                if (!decision.Allowed || account.RecoveryPauseReason != null || ManualLoginProblem(account) != null || !vault.Contains(id)) continue;
                 if (!sessions.TryGetValue(id, out var process) || platform.Inspect(process) == SessionHealth.Exited)
                     await LaunchAccount(id, batchStop.Token);
             }
@@ -1169,8 +1169,24 @@ public sealed partial class MainWindow : Window
         catch (OperationCanceledException) { Log("Automatic login queue cancelled."); }
         finally { autoLoginBatchStop = null; batchLaunching = false; UpdateSelectionControls(); }
     }
+    private async Task<bool> ConfirmExternalSessionLaunch(AccountConfiguration account)
+    {
+        var dialog = new Window { Title = "Logged in from another terminal", Width = 500, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, CanResize = false };
+        var content = new StackPanel { Margin = new Thickness(20), Spacing = 16 };
+        content.Children.Add(new TextBlock { Text = account.Label + ": " + account.RecoveryPauseReason +
+            "\n\nLaunching may disconnect the other terminal. Launch this character anyway? Maintain connection will stay off.", TextWrapping = TextWrapping.Wrap });
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, HorizontalAlignment = HorizontalAlignment.Right };
+        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var launch = new Button { Content = "Launch anyway" };
+        cancel.Click += (_, _) => dialog.Close(false);
+        launch.Click += (_, _) => dialog.Close(true);
+        buttons.Children.Add(cancel); buttons.Children.Add(launch); content.Children.Add(buttons); dialog.Content = content;
+        return await dialog.ShowDialog<bool>(this);
+    }
     private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false, bool validateRecovery = false)
     {
+        if (userInitiated && account.RecoveryPauseReason != null && !await ConfirmExternalSessionLaunch(account)) return;
         var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated);
         if (!decision.Allowed)
         {
@@ -1193,7 +1209,7 @@ public sealed partial class MainWindow : Window
             if (intentionallyStopped.Contains(account.Id) || !sessions.TryGetValue(account.Id, out process) || platform.Inspect(process) == SessionHealth.Exited) return;
             if (validate && autoLogin is WindowsAutoLogin windows)
             {
-                var full = await windows.RequestAsync(account, process, false, cancellation.Token);
+                var full = await windows.RequestAsync(account, process, false, cancellation.Token, userInitiated: userInitiated);
                 if (full) { WindowsLoginValidation.Record(dataRoot, account); disconnectRestarts.Remove(account.Id); connectionStates.Remove(account.Id); }
                 else Log(account.Label + ": existing login verified; complete startup validation still required for unattended recovery.");
             }

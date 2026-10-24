@@ -380,8 +380,22 @@ var externalMaintain = externalWindow.GetLogicalDescendants().OfType<ToggleSwitc
 if (externalMaintain.IsChecked != false) throw new Exception("External-terminal pause must display Maintain connection Off.");
 var manualPause = (string?)typeof(MainWindow).GetMethod("ManualLoginProblem", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(externalWindow, [mainAccount.PauseForExternalSession()]);
 using (var pausedLogin = new WindowsAutoLogin(externalDirectory))
-    if (manualPause != AccountConfiguration.ExternalSessionReason || pausedLogin.ReadinessProblem(mainAccount.PauseForExternalSession()) != AccountConfiguration.ExternalSessionReason)
-        throw new Exception("Manual and automatic login must remain blocked until Maintain connection is explicitly re-enabled.");
+    if (manualPause == AccountConfiguration.ExternalSessionReason || pausedLogin.ReadinessProblem(mainAccount.PauseForExternalSession()) != AccountConfiguration.ExternalSessionReason || WindowsAutoLogin.ExternalPauseProblem(mainAccount.PauseForExternalSession(), true) != null || WindowsAutoLogin.ExternalPauseProblem(mainAccount.PauseForExternalSession(), false) != AccountConfiguration.ExternalSessionReason)
+        throw new Exception("Explicit manual login must override the pause while automatic login stays blocked and Maintain connection stays off.");
+var confirmation = typeof(MainWindow).GetMethod("ConfirmExternalSessionLaunch", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+foreach (var accept in new[] { false, true })
+{
+    var answer = (Task<bool>)confirmation.Invoke(externalWindow, [mainAccount.PauseForExternalSession()])!;
+    Dispatcher.UIThread.RunJobs();
+    var warning = externalWindow.OwnedWindows.Single(w => w.Title == "Logged in from another terminal");
+    if (!warning.GetLogicalDescendants().OfType<TextBlock>().Any(t => t.Text!.Contains("POL-1039") && t.Text.Contains("Maintain connection will stay off")))
+        throw new Exception("Manual override must explain the external-login code and unchanged recovery switch.");
+    warning.GetLogicalDescendants().OfType<Button>().Single(b => Equals(b.Content, accept ? "Launch anyway" : "Cancel")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    Dispatcher.UIThread.RunJobs();
+    if (answer.GetAwaiter().GetResult() != accept || externalStore.Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id).MaintainConnection)
+        throw new Exception("Manual confirmation must support cancel/override without enabling Maintain connection.");
+}
+Console.WriteLine("PASS: POL-1039 manual warning supports Cancel and Launch anyway while automatic recovery remains off; no game launched.");
 externalMaintain.IsChecked = true;
 Dispatcher.UIThread.RunJobs();
 var resumedExternal = externalStore.Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id);
