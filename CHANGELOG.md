@@ -2,6 +2,8 @@
 
 ## 1.0.32
 
+- Read release notes explicitly as UTF-8 so Windows release checks accept punctuation consistently.
+
 - On two matching POL-1039 other-terminal messages, save Maintain connection Off before acknowledging OK and closing only the affected local POL process. Show the error code and reason on the account card across app restarts; only explicitly re-enabling Maintain connection clears it. Manual Launch profile can override the pause through a Launch anyway warning while Maintain connection stays off. Keep FFXI-3201 on its separate timed retry path.
 
 - Detect specific disconnect dialogs when addon panels obscure the “Error code” label. Require a bounded exact numeric code and matching failure wording; reject conflicting codes and footer-only text.
