@@ -22,7 +22,7 @@ public sealed class ShutdownIpc(string dataDirectory)
         if (!File.Exists(path)) return null;
         string[] lines;
         try { if (new FileInfo(path).Length > 4096) return null; lines = File.ReadAllLines(path); }
-        catch (FileNotFoundException) { return null; }
+        catch (IOException) { return null; }
         if (lines.Length != 5 || !Regex.IsMatch(lines[0], "^[0-9a-f_]{16,96}$") ||
             !lines[1].Equals(account.Character, StringComparison.OrdinalIgnoreCase) || !lines[2].Equals(account.World, StringComparison.OrdinalIgnoreCase) ||
             !long.TryParse(lines[3], out var registered) || !long.TryParse(lines[4], out var heartbeat)) return null;

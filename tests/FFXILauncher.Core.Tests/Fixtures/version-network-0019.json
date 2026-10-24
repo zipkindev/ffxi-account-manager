@@ -1,0 +1,148 @@
+{
+  "Lines": [
+    {
+      "Text": "Version Update Communication Error",
+      "Words": [
+        {
+          "Y": 126,
+          "Height": 12.5,
+          "Width": 63,
+          "Text": "Version",
+          "X": 99
+        },
+        {
+          "Y": 126,
+          "Height": 14.5,
+          "Width": 62,
+          "Text": "Update",
+          "X": 171.5
+        },
+        {
+          "Y": 126,
+          "Height": 13,
+          "Width": 139.5,
+          "Text": "Communication",
+          "X": 242.5
+        },
+        {
+          "Y": 126,
+          "Height": 12.5,
+          "Width": 40,
+          "Text": "Error",
+          "X": 392
+        }
+      ]
+    },
+    {
+      "Text": "Error code:POL-0019",
+      "Words": [
+        {
+          "Y": 159.5,
+          "Height": 13.5,
+          "Width": 40.5,
+          "Text": "Error",
+          "X": 89.5
+        },
+        {
+          "Y": 159.5,
+          "Height": 13.5,
+          "Width": 135.5,
+          "Text": "code:POL-0019",
+          "X": 139.5
+        }
+      ]
+    },
+    {
+      "Text": "Cannot connect to server. Please check",
+      "Words": [
+        {
+          "Y": 181.5,
+          "Height": 13.5,
+          "Width": 63.5,
+          "Text": "Cannot",
+          "X": 105.5
+        },
+        {
+          "Y": 181.5,
+          "Height": 13.5,
+          "Width": 71.5,
+          "Text": "connect",
+          "X": 178.5
+        },
+        {
+          "Y": 181.5,
+          "Height": 13.5,
+          "Width": 18.5,
+          "Text": "to",
+          "X": 259.5
+        },
+        {
+          "Y": 184.5,
+          "Height": 10.5,
+          "Width": 56.5,
+          "Text": "server.",
+          "X": 287.5
+        },
+        {
+          "Y": 181.5,
+          "Height": 13.5,
+          "Width": 56,
+          "Text": "Please",
+          "X": 353.5
+        },
+        {
+          "Y": 181.5,
+          "Height": 13.5,
+          "Width": 52.5,
+          "Text": "check",
+          "X": 418.5
+        }
+      ]
+    },
+    {
+      "Text": "network settings.",
+      "Words": [
+        {
+          "Y": 201.5,
+          "Height": 13.5,
+          "Width": 70,
+          "Text": "network",
+          "X": 105
+        },
+        {
+          "Y": 202,
+          "Height": 15,
+          "Width": 72.5,
+          "Text": "settings.",
+          "X": 183.5
+        }
+      ]
+    },
+    {
+      "Text": "Retry",
+      "Words": [
+        {
+          "Y": 422,
+          "Height": 12.5,
+          "Width": 38.5,
+          "Text": "Retry",
+          "X": 409
+        }
+      ]
+    },
+    {
+      "Text": "Exit",
+      "Words": [
+        {
+          "Y": 422,
+          "Height": 11,
+          "Width": 27,
+          "Text": "Exit",
+          "X": 543
+        }
+      ]
+    }
+  ],
+  "Width": 684,
+  "Height": 524
+}

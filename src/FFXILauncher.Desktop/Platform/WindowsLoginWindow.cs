@@ -160,6 +160,13 @@ internal sealed class WindowsLoginWindow(ManagedProcess target, string executabl
         Thread.Sleep(40);
         RequireForeground();
     }
+    public void ToggleWindowerConsole()
+    {
+        RequireForeground();
+        Send([KeyInput(0x2d, false, extended: true)]);
+        try { Thread.Sleep(80); }
+        finally { Send([KeyInput(0x2d, true, extended: true)]); }
+    }
     public void ConfirmGameSelection(int pressMilliseconds = 40)
     {
         if (pressMilliseconds is < 1 or > 80) throw new LoginSafetyException("Game key duration is outside the bounded input range.");

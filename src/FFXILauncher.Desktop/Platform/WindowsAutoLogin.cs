@@ -8,7 +8,7 @@ using FFXILauncher.Core;
 namespace FFXILauncher.Desktop.Platform;
 
 internal sealed record LoginRequest(string Token, string Nonce, Guid Account, ManagedProcess Process, DateTimeOffset ExpiresUtc, bool InspectOnly = false, bool MemberSectionOnly = false, int PressMs = 80, int PollMs = 50, string TrainingSection = "", int MenuGapMs = 0, bool RecoverDisconnect = false);
-internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false, string? ConfirmedErrorCode = null, bool NeedsFreshRestart = false, bool ConnectionRecovered = false);
+internal sealed record LoginReply(string Nonce, string Stage, bool Finished = false, bool Success = false, bool FullFlowValidated = false, LoginCheckpoint? InspectedCheckpoint = null, bool CredentialRejected = false, string? ConfirmedErrorCode = null, bool NeedsFreshRestart = false, bool ConnectionRecovered = false, bool ExternalSessionConflict = false);
 
 public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomation, IDisposable
 {
@@ -25,6 +25,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
     internal bool LastConnectionRecovered { get; private set; }
     internal string? LastSectionResult { get; private set; }
     public event Action<Guid, string>? Progress;
+    internal event Action<Guid>? ExternalSessionDetected;
     internal static void ValidateRecoveryCompletion(bool requested, bool recovered, bool restartRequired)
     {
         if (requested && recovered == restartRequired)
@@ -32,7 +33,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
     }
     public string? SetupProblem(AccountConfiguration account) => LoginCheckpoints.Requirements(account) ??
         (!WindowsUnattendedSetup.IsElevated ? "Start the manager using its unattended desktop shortcut." : null);
-    public string? ReadinessProblem(AccountConfiguration account) => SetupProblem(account) ??
+    public string? ReadinessProblem(AccountConfiguration account) => account.RecoveryPauseReason ?? SetupProblem(account) ??
         (!WindowsLoginValidation.IsValidated(dataDirectory, account) ? "Validate this account's complete Windows login first." : null);
     public async Task LoginAsync(AccountConfiguration account, ManagedProcess process, ICredentialVault vault, CancellationToken cancellationToken)
     {
@@ -46,6 +47,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
         if (!string.Equals(Path.GetFullPath(dataDirectory), canonical, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Login automation requires the Windows user's normal configuration directory.");
         await gate.WaitAsync(cancellation);
         string? nonce = null;
+        var externalHandled = false;
         try
         {
             await EnsureWorker(cancellation);
@@ -70,6 +72,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                     if (reply.Stage != stage) { stage = reply.Stage; Progress?.Invoke(account.Id, stage); }
                     if (reply.Finished)
                     {
+                        if (reply.ExternalSessionConflict) { externalHandled = true; ExternalSessionDetected?.Invoke(account.Id); }
                         if (!reply.Success) throw new InvalidOperationException(reply.Stage);
                         if (memberSectionOnly || trainingSection != "") LastSectionResult = reply.Stage;
                         LastInspectionCheckpoint = reply.InspectedCheckpoint;
@@ -88,7 +91,16 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
         {
             if (nonce != null && sessionDirectory != null && Directory.Exists(sessionDirectory))
                 try { File.WriteAllText(Path.Combine(sessionDirectory, "cancel"), nonce); } catch (IOException) { }
-            gate.Release();
+            // The worker persists the policy before input. Reconcile it even
+            // when its final reply was lost or the helper unexpectedly exited.
+            try
+            {
+                var saved = new ConfigurationStore(dataDirectory).Load().ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
+                if (!externalHandled && saved is { MaintainConnection: false, RecoveryPauseReason: not null })
+                    ExternalSessionDetected?.Invoke(account.Id);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+            finally { gate.Release(); }
         }
     }
     private async Task EnsureWorker(CancellationToken cancellation)
@@ -228,7 +240,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                     void Report(string stage) => WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, stage));
                     try
                     {
-                        if (request.TrainingSection is not ("" or "password" or "play" or "continue" or "character" or "return" or "success") ||
+                        if (request.TrainingSection is not ("" or "password" or "play" or "continue" or "character" or "return" or "success" or "clear-panel" or "external-exit") ||
                             request.RecoverDisconnect && (request.InspectOnly || request.MemberSectionOnly || request.TrainingSection != "") ||
                             request.InspectOnly && (request.MemberSectionOnly || request.TrainingSection != "") ||
                             request.MemberSectionOnly && request.TrainingSection != "") throw new LoginSafetyException("Conflicting calibration modes rejected.");
@@ -237,8 +249,10 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                             throw new LoginSafetyException("Timing settings outside bounded section training rejected.");
                         if (request.TrainingSection == "success" ? request.MenuGapMs is < 0 or > 3000 : request.MenuGapMs != 0) throw new LoginSafetyException("Menu gap outside bounded success training rejected.");
                         var config = new ConfigurationStore(root).Load(); var account = config.ConfiguredAccounts.Single(a => a.Id == request.Account);
-                        if (request.RecoverDisconnect && (!account.MaintainConnection || !account.AutoLoginEnabled))
+                        if ((request.RecoverDisconnect || request.TrainingSection == "clear-panel") && (!account.MaintainConnection || !account.AutoLoginEnabled))
                             throw new LoginSafetyException("Maintain connection was disabled; recovery cancelled.");
+                        if (!request.InspectOnly && request.TrainingSection != "external-exit" && account.RecoveryPauseReason is {} pausedReason)
+                            throw new LoginSafetyException(pausedReason);
                         var engine = new WindowsLoginEngine(directory, config, account, request.Process, Report);
                         engine.RunAsync(new WindowsCredentialVault(Path.Combine(root, "vault")), request.InspectOnly, cancelled.Token, request.MemberSectionOnly, request.PressMs, request.PollMs, request.TrainingSection, request.MenuGapMs, request.RecoverDisconnect).GetAwaiter().GetResult();
                         ValidateRecoveryCompletion(request.RecoverDisconnect, engine.ConnectionRecovered, engine.NeedsFreshRestart);
@@ -248,7 +262,7 @@ public sealed class WindowsAutoLogin(string dataDirectory) : IAutoLoginAutomatio
                     {
                         // Never return OCR text, credentials, or detailed native exceptions across IPC.
                         var message = ex is OperationCanceledException ? "Login cancelled." : ex is LoginSafetyException ? ex.Message : "Login helper stopped (" + ex.GetType().Name + "). Inspect POL before retrying.";
-                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, message, true));
+                        WriteJson(Path.Combine(directory, "reply.json"), new LoginReply(request.Nonce, message, true, ExternalSessionConflict: ex is ExternalSessionException));
                     }
                 }
                 Thread.Sleep(100);
@@ -263,3 +277,5 @@ internal class LoginSafetyException(string message) : InvalidOperationException(
 internal sealed class LoginFocusException(string message) : LoginSafetyException(message);
 internal sealed class LoginObscuredException(string message) : LoginSafetyException(message);
 internal sealed class LoginWindowUnavailableException(string message) : LoginSafetyException(message);
+
+internal sealed class ExternalSessionException(string message) : LoginSafetyException(message);

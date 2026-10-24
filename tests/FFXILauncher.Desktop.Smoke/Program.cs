@@ -365,6 +365,31 @@ var scheduleFixtures = new MaintenanceSnapshot([
     new("https://www.playonline.com/ff11us/polnews/news102.shtml", "Fixture Asura maintenance", scheduleTime.AddHours(2), scheduleTime.AddHours(3), "Asura")
 ], scheduleTime);
 File.WriteAllText(Path.Combine(directory, "maintenance.json"), System.Text.Json.JsonSerializer.Serialize(scheduleFixtures));
+// An external-terminal pause must remain visible after a fresh manager opens,
+// and only explicitly enabling Maintain connection clears it.
+var externalDirectory = Path.Combine(Path.GetTempPath(), "ffxi-external-ui-" + Guid.NewGuid().ToString("N"));
+var externalStore = new ConfigurationStore(externalDirectory);
+externalStore.Save(new LauncherConfiguration(Accounts: [mainAccount.PauseForExternalSession(), secondAccount]));
+var externalWindow = new MainWindow(externalDirectory, false);
+externalWindow.Show();
+Dispatcher.UIThread.RunJobs();
+var externalStatus = externalWindow.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionStatus_" + mainAccount.Id.ToString("N"));
+if (externalStatus.Text != AccountConfiguration.ExternalSessionReason)
+    throw new Exception("The external-login error and reason must remain visible on a fresh idle account card.");
+var externalMaintain = externalWindow.GetLogicalDescendants().OfType<ToggleSwitch>().Where(t => Equals(t.Content, "Maintain connection")).First();
+if (externalMaintain.IsChecked != false) throw new Exception("External-terminal pause must display Maintain connection Off.");
+var manualPause = (string?)typeof(MainWindow).GetMethod("ManualLoginProblem", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(externalWindow, [mainAccount.PauseForExternalSession()]);
+using (var pausedLogin = new WindowsAutoLogin(externalDirectory))
+    if (manualPause != AccountConfiguration.ExternalSessionReason || pausedLogin.ReadinessProblem(mainAccount.PauseForExternalSession()) != AccountConfiguration.ExternalSessionReason)
+        throw new Exception("Manual and automatic login must remain blocked until Maintain connection is explicitly re-enabled.");
+externalMaintain.IsChecked = true;
+Dispatcher.UIThread.RunJobs();
+var resumedExternal = externalStore.Load().ConfiguredAccounts.Single(a => a.Id == mainAccount.Id);
+if (!resumedExternal.MaintainConnection || resumedExternal.RecoveryPauseReason != null || externalStatus.Text == AccountConfiguration.ExternalSessionReason)
+    throw new Exception("Explicitly re-enabling Maintain connection must clear the saved external-login reason and resume policy.");
+externalWindow.Close();
+Directory.Delete(externalDirectory, true);
+Console.WriteLine("PASS: external-login pause survives manager restart, shows error/reason and clears only on explicit Maintain connection enable.");
 var configured = new MainWindow(directory, false);
 configured.Show();
 Dispatcher.UIThread.RunJobs();

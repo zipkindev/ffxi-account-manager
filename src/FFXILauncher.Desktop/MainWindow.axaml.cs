@@ -85,6 +85,18 @@ public sealed partial class MainWindow : Window
         if (autoLogin is WindowsAutoLogin windowsLogin)
             windowsLogin.Progress += (id, message) => { calibrationControl?.Report(message); Dispatcher.UIThread.Post(() => { if (statuses.TryGetValue(id, out var status)) status.Text = message; }); };
         store = new(directory);
+        if (autoLogin is WindowsAutoLogin externalLogin)
+            externalLogin.ExternalSessionDetected += id =>
+            {
+                // RequestAsync resumes on the UI thread. Merge the worker's saved
+                // policy into this manager before any retry can be queued.
+                configuration = configuration with { Accounts = configuration.ConfiguredAccounts.Select(a => a.Id == id ? a.PauseForExternalSession() : a).ToList() };
+                store.Save(configuration);
+                nextRetry.Remove(id); disconnectRestarts.Remove(id); maintenanceRestarts.Remove(id);
+                connectionStates.Remove(id);
+                Log(configuration.ConfiguredAccounts.Single(a => a.Id == id).Label + ": " + AccountConfiguration.ExternalSessionReason);
+                RenderAccounts();
+            };
         maintenance = new MaintenanceMonitor(directory);
         maintenance.Load();
         vault = new WindowsCredentialVault(Path.Combine(directory, "vault"));
@@ -149,7 +161,20 @@ public sealed partial class MainWindow : Window
         dialog.Content = layout;
         await dialog.ShowDialog(this);
     }
-    private void Log(string message) => Activity.Text = DateTime.Now.ToString("HH:mm:ss") + "  " + message + "\n" + string.Join('\n', (Activity.Text ?? "").Split('\n').Take(9));
+    private void Log(string message)
+    {
+        Activity.Text = DateTime.Now.ToString("HH:mm:ss") + "  " + message + "\n" + string.Join('\n', (Activity.Text ?? "").Split('\n').Take(9));
+        // Retain the already-visible activity messages, never OCR or request payloads.
+        try
+        {
+            var directory = Path.Combine(dataRoot, "diagnostics");
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory, "activity.jsonl");
+            if (File.Exists(path) && new FileInfo(path).Length >= 128 * 1024) File.Move(path, path + ".previous", true);
+            File.AppendAllText(path, System.Text.Json.JsonSerializer.Serialize(new { Utc = DateTimeOffset.UtcNow, Message = message }) + "\n");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
     private void RememberSession(Guid id, ManagedProcess process)
     {
         sessions[id] = process;
@@ -488,12 +513,14 @@ public sealed partial class MainWindow : Window
                 updating = true;
                 try
                 {
-                    var next = configuration with { Accounts = configuration.ConfiguredAccounts.Select(a => a.Id == account.Id ? a with { AutoLogin = auto, MaintainConnection = maintain } : a).ToList() };
+                    var next = configuration with { Accounts = configuration.ConfiguredAccounts.Select(a => a.Id == account.Id ? a with { AutoLogin = auto, MaintainConnection = maintain, RecoveryPauseReason = maintain ? null : a.RecoveryPauseReason } : a).ToList() };
                     if (!configurationReadable) throw new InvalidOperationException("Configuration could not be loaded.");
                     store.Save(next);
                     configuration = next;
                     autoToggle.IsChecked = auto;
                     maintainToggle.IsChecked = maintain;
+                    if (maintain && statuses.TryGetValue(account.Id, out var resumedStatus)) resumedStatus.Text = "No process tracked";
+                    RefreshSessions();
                     if (!auto) { intentionallyStopped.Add(account.Id); if (accountCancellation.TryGetValue(account.Id, out var cancellation)) cancellation.Cancel(); }
                     else if (!maintain && connectionChecks.Contains(account.Id) && accountCancellation.TryGetValue(account.Id, out var recoveryStop)) recoveryStop.Cancel();
                     Log(account.Label + (auto ? (maintain ? ": auto login and maintenance enabled." : ": auto login enabled; no automatic reconnect.") : ": auto login and maintenance disabled; game stays open."));
@@ -514,7 +541,7 @@ public sealed partial class MainWindow : Window
             characterMaintenance[account.Id] = schedule;
             var maintenanceColor = Color.Parse(ThemeCatalog.Resolve(configuration.Theme).Inset);
             body.Children.Add(new Border { Background = new SolidColorBrush(Color.FromArgb(127, maintenanceColor.R, maintenanceColor.G, maintenanceColor.B)), CornerRadius = new CornerRadius(8), Padding = new Thickness(10, 6), Child = schedule });
-            var status = new TextBlock { Name = "SessionStatus_" + account.Id.ToString("N"), Text = "No process tracked", Foreground = ThemeCatalog.BrushFor("Accent") };
+            var status = new TextBlock { Name = "SessionStatus_" + account.Id.ToString("N"), Text = account.RecoveryPauseReason ?? "No process tracked", TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Accent") };
             statuses[account.Id] = status;
             body.Children.Add(status);
             var state = new TextBlock { Name = "CharacterState_" + account.Id.ToString("N"), TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Muted") };
@@ -715,7 +742,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception ex) { Log("Could not save account: " + ex.Message); }
     }
-    private string? ManualLoginProblem(AccountConfiguration account) =>
+    private string? ManualLoginProblem(AccountConfiguration account) => account.RecoveryPauseReason ??
         (autoLogin is WindowsAutoLogin windows ? windows.SetupProblem(account) : autoLogin.ReadinessProblem(account)) ??
         (!vault.Contains(account.Id) ? "Save this account's Square Enix password first." : null);
     private bool LoginOperationActive => batchLaunching || accountCancellation.Count > 0 || pending.Count > 0 || shuttingDown.Count > 0 || shutdownCancelling.Count > 0 || forceClosing.Count > 0;
@@ -890,7 +917,7 @@ public sealed partial class MainWindow : Window
             {
                 0 => a with { AutoLogin = true },
                 1 => a with { AutoLogin = false, MaintainConnection = false },
-                2 => a with { AutoLogin = true, MaintainConnection = true },
+                2 => a with { AutoLogin = true, MaintainConnection = true, RecoveryPauseReason = null },
                 3 => a with { AutoLogin = a.AutoLoginEnabled, MaintainConnection = false },
                 4 => a with { ScheduleMaintenance = true },
                 _ => a with { ScheduleMaintenance = false }
@@ -954,6 +981,7 @@ public sealed partial class MainWindow : Window
         if (pending.Count > 0) { Log("Another profile is launching. Wait for it to finish."); return; }
         if (!pending.Add(id)) return;
         var account = configuration.ConfiguredAccounts.Single(a => a.Id == id);
+        if (account.RecoveryPauseReason is {} pausedReason) { pending.Remove(id); Log(account.Label + ": " + pausedReason); return; }
         if (sessions.Keys.Any(other => other != id && configuration.ConfiguredAccounts.Any(a => a.Id == other && AccountIdentity.Conflicts(account, a)) &&
             platform.Inspect(sessions[other]) != SessionHealth.Exited))
         { pending.Remove(id); Log("This POL account or character already has a tracked session."); return; }
@@ -1022,6 +1050,8 @@ public sealed partial class MainWindow : Window
         {
             if (!statuses.TryGetValue(id, out var status) || pending.Contains(id) || accountCancellation.ContainsKey(id)) continue;
             var health = platform.Inspect(process);
+            var paused = configuration.ConfiguredAccounts.Single(a => a.Id == id);
+            if (!paused.MaintainConnection && paused.RecoveryPauseReason is {} reason) { status.Text = reason; continue; }
             if (health != SessionHealth.Exited && connectionStates.TryGetValue(id, out var connectionState))
             { status.Text = $"PID {process.Pid} · {connectionState}"; continue; }
             if (health != SessionHealth.Exited && shutdownProgress.TryGetValue(id, out var progress)) { status.Text = $"PID {process.Pid} · {progress}"; continue; }
@@ -1204,7 +1234,7 @@ public sealed partial class MainWindow : Window
     private string RecoveryStatus(Guid id)
     {
         var account = configuration.ConfiguredAccounts.Single(a => a.Id == id);
-        if (!account.MaintainConnection) return "No process tracked";
+        if (!account.MaintainConnection) return account.RecoveryPauseReason ?? "No process tracked";
         var decision = EvaluateRecovery(account);
         if (!decision.Allowed) return decision.Reason + (decision.ResumeUtc is {} resume ? $" · resumes after {MaintenanceTimeDisplay.Instant(resume)}" : "");
         var readiness = disconnectRestarts.Contains(id) && WindowsLoginValidation.HasPriorValidation(dataRoot, account)
@@ -1376,17 +1406,32 @@ public sealed partial class MainWindow : Window
                     ? ": checking for a disconnect after three missed connection reports."
                     : ": checking for a disconnect after " + (int)(checkTime - traffic.LastIncomingUtc).TotalSeconds + " seconds without server traffic."));
                 await windows.RequestAsync(account, process, true, cancellation.Token);
+                if (windows.LastInspectionCheckpoint == LoginCheckpoint.ObscuringAddonPanel)
+                {
+                    if (windows.ReadinessProblem(account) != null || !account.MaintainConnection || intentionallyStopped.Contains(account.Id)) return false;
+                    Log(account.Label + ": HaupBridge panel obscures the connection check; clearing only that panel before reading the error again.");
+                    await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: "clear-panel");
+                    await windows.RequestAsync(account, process, true, cancellation.Token);
+                }
                 var code = windows.LastInspectionErrorCode;
-                if (!DisconnectRecovery.IsDisconnectCode(code))
+                if (code == "POL-1039")
+                {
+                    await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: "external-exit");
+                    return true;
+                }
+                var resumeMenu = code == null && windows.LastInspectionCheckpoint is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation;
+                if (!DisconnectRecovery.IsDisconnectCode(code) && code != "POL-0019" && !resumeMenu)
                 {
                     nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(5);
                     Log(account.Label + ": no disconnect dialog found; the session was left running. Screen checks deferred while the same condition persists.");
                     return false;
                 }
                 var latest = configuration.ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
-                if (latest == null || !DisconnectRecovery.CanRestart(latest, intentionallyStopped.Contains(account.Id), windows.LastInspectionCredentialRejected, code) ||
+                if (latest == null || !(code == "POL-0019" || resumeMenu
+                        ? latest.MaintainConnection && latest.AutoLoginEnabled && !intentionallyStopped.Contains(account.Id) && !windows.LastInspectionCredentialRejected && windows.ReadinessProblem(latest) == null
+                        : DisconnectRecovery.CanRestart(latest, intentionallyStopped.Contains(account.Id), windows.LastInspectionCredentialRejected, code)) ||
                     !sessions.TryGetValue(account.Id, out var tracked) || tracked != process) return false;
-                connectionStates[account.Id] = "Disconnected (" + code + ") · reconnecting…";
+                connectionStates[account.Id] = resumeMenu ? "Reconnecting from the saved game menu…" : "Disconnected (" + code + ") · reconnecting…";
                 // A fresh render heartbeat does not override two matching DC-error reads.
                 // Recent server packets do: never interrupt an active connection.
                 if (ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow)) return false;
@@ -1395,6 +1440,18 @@ public sealed partial class MainWindow : Window
                     connectionStates[account.Id] = "Disconnected (" + code + ") · " + EvaluateRecovery(account).Reason;
                     Log(account.Label + ": disconnected (" + code + "). " + EvaluateRecovery(account).Reason);
                     return false;
+                }
+                if (code == "POL-0019" || resumeMenu)
+                {
+                    Log(account.Label + (resumeMenu ? ": resuming the verified cached game menu in the existing process." : ": POL version service is unavailable; retrying its explicit network dialog in the existing process."));
+                    var fullLogin = await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: resumeMenu ? "continue" : "");
+                    if ((resumeMenu || fullLogin) && ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow))
+                    {
+                        connectionStates.Remove(account.Id);
+                        Log(account.Label + (resumeMenu ? ": character and fresh server traffic verified after resuming the cached menu." : ": full login and fresh server traffic verified after the network retry."));
+                        return true;
+                    }
+                    return false; // Never force-close the startup network-retry dialog.
                 }
                 Log(account.Label + ": disconnected (" + code + "); trying the existing character-selection login.");
                 try { await windows.RequestAsync(account, process, false, cancellation.Token, recoverDisconnect: true); }

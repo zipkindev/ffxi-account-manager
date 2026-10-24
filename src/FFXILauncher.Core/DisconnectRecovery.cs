@@ -4,10 +4,11 @@ public enum DisconnectFollowup { Wait, ResumeCharacterSelection, FreshRestart }
 public static class DisconnectRecovery
 {
     public static DisconnectFollowup Followup(string? firstCode, string? secondCode, LoginCheckpoint screen) =>
+        firstCode == "POL-1039" || secondCode == "POL-1039" ? DisconnectFollowup.Wait :
         firstCode != null && firstCode == secondCode ? DisconnectFollowup.FreshRestart :
         firstCode == null && secondCode == null && screen is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation
             ? DisconnectFollowup.ResumeCharacterSelection : DisconnectFollowup.Wait;
-    public static bool IsDisconnectCode(string? code) => code is "POL-0250" or "FFXI-4001" or "FFXI-4002";
+    public static bool IsDisconnectCode(string? code) => code is "POL-0250" or "FFXI-4001" or "FFXI-4002" or "FFXI-3100" or "POL-0512";
     public static bool CanRestart(AccountConfiguration account, bool intentionallyStopped, bool credentialRejected, string? confirmedCode) =>
         account.MaintainConnection && account.AutoLoginEnabled && !intentionallyStopped && !credentialRejected && IsDisconnectCode(confirmedCode);
     public static bool CanCloseHung(AccountConfiguration account, bool intentionallyStopped, SessionHealth health,
@@ -74,5 +75,16 @@ public static class ServerTraffic
                     ? new(reportTime, incomingTime) : null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return null; }
+    }
+}
+
+// Only the explicit version-communication Retry control uses this policy.
+public sealed class NetworkRetryBackoff
+{
+    public int Attempts { get; private set; }
+    public TimeSpan ReserveRetry()
+    {
+        if (Attempts >= 3) throw new InvalidOperationException("POL cannot reach the version service after three retries. The window remains open; recovery will check again later.");
+        return TimeSpan.FromSeconds(30 * (1 << Attempts++));
     }
 }

@@ -5,6 +5,9 @@ namespace FFXILauncher.Core;
 public sealed record AccountConfiguration(Guid Id, string Label, string Profile, string Character,
     string World, string PolMember, string SquareEnixId, bool MaintainConnection = false, bool AutoLogin = false, string PlayOnlineId = "", bool ScheduleMaintenance = false, bool PolPasswordStoredInPol = true, bool MemberPasswordRequired = false, bool UsesOneTimePassword = false)
 {
+    public string? RecoveryPauseReason { get; init; }
+    public const string ExternalSessionReason = "POL-1039: logged in from another terminal. Maintain connection turned off. Re-enable it after ending the other login.";
+    public AccountConfiguration PauseForExternalSession() => this with { MaintainConnection = false, RecoveryPauseReason = ExternalSessionReason };
     [System.Text.Json.Serialization.JsonIgnore]
     public bool AutoLoginEnabled => AutoLogin || MaintainConnection;
 }

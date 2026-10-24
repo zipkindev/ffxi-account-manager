@@ -1,0 +1,56 @@
+{
+  "Lines": [
+    {
+      "Text": "Addon: Ha",
+      "Words": [
+        {
+          "Y": 53.5,
+          "Height": 12,
+          "Width": 50.5,
+          "Text": "Addon:",
+          "X": 33.5
+        },
+        {
+          "Y": 55,
+          "Height": 10.5,
+          "Width": 16.5,
+          "Text": "Ha",
+          "X": 97
+        }
+      ]
+    },
+    {
+      "Text": "Addon: Ge",
+      "Words": [
+        {
+          "Y": 72,
+          "Height": 11.5,
+          "Width": 51,
+          "Text": "Addon:",
+          "X": 33
+        },
+        {
+          "Y": 72.5,
+          "Height": 11,
+          "Width": 16.5,
+          "Text": "Ge",
+          "X": 97
+        }
+      ]
+    },
+    {
+      "Text": "$1",
+      "Words": [
+        {
+          "Y": 342,
+          "Height": 16.5,
+          "Width": 14,
+          "Text": "$1",
+          "X": 15.5
+        }
+      ]
+    }
+  ],
+  "Width": 1280,
+  "Height": 800
+}

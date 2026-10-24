@@ -49,7 +49,7 @@ public sealed record LoginFrame(int Width, int Height, OcrLine[] Lines)
         return matches.ToArray();
     }
 }
-public enum LoginCheckpoint { Unknown, MemberList, MemberInformation, Connect, PasswordEditor, Home, Play, PlayConfirmation, Agreement, Title, Characters, CharacterConfirmation, Error }
+public enum LoginCheckpoint { Unknown, MemberList, MemberInformation, Connect, PasswordEditor, Home, Play, PlayConfirmation, Agreement, Title, Characters, CharacterConfirmation, Error, ObscuringAddonPanel }
 public static class LoginCheckpoints
 {
     public static OcrLine? PolMenuButton(LoginFrame frame, string label)
@@ -251,30 +251,54 @@ public static class LoginCheckpoints
             label.Words.Any(w => w.X < frame.Width * 0.1)) return null;
         return (x, y);
     }
-    public static string? MaintenanceErrorCode(LoginFrame frame)
+    public static bool HasHaupPanel(LoginFrame frame) => frame.Has("All original options") &&
+        Regex.IsMatch(frame.Text, @"\bHAUP\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    public static bool HasEmptyWindowerConsole(LoginFrame frame) =>
+        frame.Lines.Count(l => l.Text.Contains("Addon:", StringComparison.OrdinalIgnoreCase)) >= 2 &&
+        frame.Lines.Any(l => Regex.IsMatch(l.Text.Trim(), @"^\$[|Il1]?$", RegexOptions.CultureInvariant) && l.Words.Length > 0 &&
+            l.Words.All(w => double.IsFinite(w.X) && double.IsFinite(w.Y) && w.Width > 0 && w.Height > 0 &&
+                w.X >= 0 && w.X + w.Width < frame.Width * .08 && w.Y > frame.Height * .1 && w.Y + w.Height < frame.Height * .7));
+    public static string? MaintenanceErrorCode(LoginFrame frame) =>
+        Recognize(frame) == LoginCheckpoint.Error ? BoundedErrorCode(frame) : null;
+    private static string? BoundedErrorCode(LoginFrame frame)
     {
-        if (Recognize(frame) != LoginCheckpoint.Error) return null;
+        var codes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var line in frame.Lines)
         {
-            // Windows OCR reads the game's capital I as a lowercase l at
-            // common resolutions. Normalize only that prefix glyph; the
-            // four error digits and dialog-region checks remain exact.
+            // Normalize only I/l in the prefix, never the numeric error digits.
             var code = Regex.Match(line.Text, @"\b(POL|FFX[Il])[\s:-]*(\d{4})\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (!code.Success || line.Words.Length == 0 || line.Words.Any(w => !double.IsFinite(w.X) || !double.IsFinite(w.Y) ||
                 !double.IsFinite(w.Width) || !double.IsFinite(w.Height) || w.Width <= 0 || w.Height <= 0 ||
                 w.X < 0 || w.X + w.Width > frame.Width || w.Y < frame.Height * .1 || w.Y + w.Height > frame.Height * .75)) continue;
-            return (code.Groups[1].Value.StartsWith("FFX", StringComparison.OrdinalIgnoreCase) ? "FFXI" : "POL") + "-" + code.Groups[2].Value;
+            codes.Add((code.Groups[1].Value.StartsWith("FFX", StringComparison.OrdinalIgnoreCase) ? "FFXI" : "POL") + "-" + code.Groups[2].Value);
         }
-        return null;
+        return codes.Count == 1 ? codes.Single() : null;
     }
+    // Addon panels can obscure "Error code" while leaving the actual code and
+    // specific failure message readable. Require both; HUD text alone is not evidence.
+    public static bool IsExternalSessionConflict(LoginFrame frame) =>
+        BoundedErrorCode(frame) == "POL-1039" && frame.Has("Disconnected from PlayOnline") &&
+        frame.Has("current PlayOnline ID was used to log in from another terminal");
+    public static string? NetworkDialogCode(LoginFrame frame) => BoundedErrorCode(frame) switch
+    {
+        "POL-0250" when frame.Has("No response from server") => "POL-0250",
+        "POL-0512" when frame.Has("Connection terminated or not available") && frame.Has("network settings") => "POL-0512",
+        "FFXI-4001" when frame.Has("server") && frame.Has("timed out") && frame.Has("shut down") => "FFXI-4001",
+        "FFXI-4002" when frame.Has("Time out") && frame.Has("server") && frame.Has("shut down") => "FFXI-4002",
+        "FFXI-3100" when frame.Has("connect to lobby server") => "FFXI-3100",
+        "POL-0019" when frame.Has("Version Update Communication Error") && frame.Has("Cannot connect to server") && frame.Has("network settings") => "POL-0019",
+        _ => null
+    };
     public static string? DisconnectDialogCode(LoginFrame frame)
     {
         var code = MaintenanceErrorCode(frame);
         return code switch
         {
             "POL-0250" when frame.Has("No response from server") => code,
+            "POL-0512" when frame.Has("Connection terminated or not available") && frame.Has("network settings") => code,
             "FFXI-4001" when frame.Has("server") && frame.Has("timed out") && frame.Has("shut down") => code,
             "FFXI-4002" when frame.Has("Time out") && frame.Has("server") && frame.Has("shut down") => code,
+            "FFXI-3100" when frame.Has("connect to lobby server") => code,
             _ => null
         };
     }
@@ -284,7 +308,7 @@ public static class LoginCheckpoints
     public static LoginCheckpoint Recognize(LoginFrame frame)
     {
         // Error checks precede actionable screens. Maintenance news on the home page is not an error.
-        if (frame.Has("Error code") || IsCredentialRejection(frame) || frame.Has("Connection failed")) return LoginCheckpoint.Error;
+        if (frame.Has("Error code") || IsCredentialRejection(frame) || frame.Has("Connection failed") || NetworkDialogCode(frame) != null || IsExternalSessionConflict(frame)) return LoginCheckpoint.Error;
         if (frame.Has("Log in with") && frame.Has("Yes") && frame.Has("No")) return LoginCheckpoint.CharacterConfirmation;
         if (frame.Has("Please enter your password") && frame.Has("software keyboard")) return LoginCheckpoint.PasswordEditor;
         if (frame.Has("Connect to PlayOnline") && frame.Has("Square Enix Password")) return LoginCheckpoint.Connect;

@@ -20,6 +20,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
     public bool InspectedCredentialRejection { get; private set; }
     public string? InspectedErrorCode { get; private set; }
     private bool recoveringDisconnect;
+    private bool inspectionOnly, checkingExternalSession;
     public bool NeedsFreshRestart { get; private set; }
     public bool ConnectionRecovered => recoveringDisconnect && worldVerified;
     internal static bool StopsAtCharacterSelection(string section, bool recovering, bool cancelled) =>
@@ -50,6 +51,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
             var lostFocus = false;
             try { window.Capture(framePath); gameFrame = window.IsGameWindow || window.IsCharacterWindow(account.Character); captured = true; }
             catch (LoginFocusException) { lostFocus = true; }
+            catch (LoginWindowUnavailableException) when (DateTimeOffset.UtcNow < captureUntil) { }
             catch (LoginObscuredException) when (DateTimeOffset.UtcNow < captureUntil) { }
             finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
             if (captured) break;
@@ -87,6 +89,41 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     ReadMs = clock.ElapsedMilliseconds - captureMs, LoadingOnly = loadingOnly, ConfirmationOnly = confirmationOnly, Checkpoint = LoginCheckpoints.Recognize(frame).ToString() }) + "\n");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        if (!inspectionOnly && !checkingExternalSession && LoginCheckpoints.MaintenanceErrorCode(frame) == "POL-1039")
+        {
+            checkingExternalSession = true;
+            await Task.Delay(500, cancellation);
+            var confirmed = await ReadFrame(cancellation);
+            if (!LoginCheckpoints.IsExternalSessionConflict(frame) || !LoginCheckpoints.IsExternalSessionConflict(confirmed))
+                throw new LoginSafetyException("The external-login dialog changed; no button was pressed.");
+            // Persist the user's policy before accepting the dialog or closing POL.
+            // A worker/app failure must never turn this into an automatic restart.
+            try
+            {
+                var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher");
+                var store = new ConfigurationStore(root);
+                var current = store.Load();
+                var target = current.ConfiguredAccounts.Single(a => a.Id == account.Id);
+                if (target.PlayOnlineId != account.PlayOnlineId || target.Character != account.Character || target.World != account.World)
+                    throw new LoginSafetyException("The account mapping changed; external-session cleanup refused.");
+                store.Save(current with { Accounts = current.ConfiguredAccounts.Select(a => a.Id == account.Id ? a.PauseForExternalSession() : a).ToList() });
+                report(AccountConfiguration.ExternalSessionReason);
+                var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                try
+                {
+                    if (confirmed.UniqueLine("OK") != null) Click(confirmed, "OK");
+                    else window.ConfirmGameSelection();
+                }
+                finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+                await Task.Delay(1000, cancellation);
+                await WindowsProcessCleanup.TerminateAsync(process, config.PolPath, cancellation);
+            }
+            catch (Exception ex)
+            {
+                throw new ExternalSessionException(AccountConfiguration.ExternalSessionReason + " Local POL cleanup needs attention (" + ex.GetType().Name + ").");
+            }
+            throw new ExternalSessionException(AccountConfiguration.ExternalSessionReason + " Local POL session closed.");
+        }
         return frame;
     }
 
@@ -228,6 +265,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
 
     private async Task RunCoreAsync(ICredentialVault vault, bool inspectOnly, CancellationToken cancellation, bool memberSectionOnly, int pressMs, int pollMs, string trainingSection, int menuGapMs)
     {
+        inspectionOnly = inspectOnly;
         cancellation.ThrowIfCancellationRequested();
         if (!Path.GetFileName(config.PolPath).Equals("pol.exe", StringComparison.OrdinalIgnoreCase) ||
             !Path.GetFileName(config.WindowerPath).Equals("Windower.exe", StringComparison.OrdinalIgnoreCase))
@@ -258,7 +296,27 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                 InspectedErrorCode = InspectedCheckpoint == LoginCheckpoint.Error ? firstCode : null;
                 InspectedCredentialRejection = InspectedCheckpoint == LoginCheckpoint.Error && LoginCheckpoints.IsCredentialRejection(inspected);
             }
+            else if (InspectedCheckpoint is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
+            {
+                var firstMenu = InspectedCheckpoint;
+                await Task.Delay(500, cancellation);
+                inspected = await ReadFrame(cancellation);
+                if (LoginCheckpoints.Recognize(inspected) != firstMenu) InspectedCheckpoint = LoginCheckpoint.Unknown;
+            }
+            if (InspectedCheckpoint == LoginCheckpoint.Unknown && LoginCheckpoints.HasHaupPanel(inspected))
+                InspectedCheckpoint = LoginCheckpoint.ObscuringAddonPanel;
             report("Calibration capture saved."); return;
+        }
+        if (trainingSection == "external-exit")
+        {
+            await ReadFrame(cancellation); // Only two matching POL-1039 reads authorize cleanup.
+            throw new LoginSafetyException("POL-1039 is no longer visible; no cleanup performed.");
+        }
+        if (trainingSection == "clear-panel")
+        {
+            await ClearObscuringPanelAsync(cancellation);
+            MemberSectionResult = "Obscuring HaupBridge panel closed; no game dialog was accepted.";
+            return;
         }
         if (recoveringDisconnect)
         {
@@ -362,6 +420,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
         var titleEnteredAt = DateTimeOffset.MinValue;
         GameSession? worldObservation = null;
         var sessionBackoff = new CharacterSessionBackoff();
+        var networkBackoff = new NetworkRetryBackoff();
         bool CanReplaySuccessfulDefault() => trainingSection == "" && identityVerified && passwordEntered &&
             titleEnteredAt != DateTimeOffset.MinValue && replayPath != null && confirmations.HasReplay;
         void ReplaySuccessfulDefault()
@@ -628,6 +687,29 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     gameHandoffFocused = true;
                     frame = await ReadFrame(cancellation);
                 }
+                if (!memberSectionOnly && trainingSection == "" && LoginCheckpoints.NetworkDialogCode(frame) == "POL-0019")
+                {
+                    if (passwordEntered || submitted) throw new LoginSafetyException("POL returned to version communication after authentication. Credentials will not be resubmitted; the process remains open.");
+                    await Task.Delay(500, cancellation);
+                    var confirmedNetwork = await ReadFrame(cancellation);
+                    if (LoginCheckpoints.NetworkDialogCode(confirmedNetwork) != "POL-0019") continue;
+                    if (GameUpdateWorkflow.Control(confirmedNetwork, "Retry") == null) throw new LoginSafetyException("The network Retry button is not uniquely readable. POL remains open.");
+                    var delay = networkBackoff.ReserveRetry();
+                    report($"POL cannot reach the version service (POL-0019). Waiting {(int)delay.TotalSeconds} seconds before retry {networkBackoff.Attempts}/3…");
+                    await Task.Delay(delay, cancellation);
+                    deadline += delay;
+                    var retryFrame = await ReadFrame(cancellation);
+                    await Task.Delay(500, cancellation);
+                    var checkedRetry = await ReadFrame(cancellation);
+                    if (LoginCheckpoints.NetworkDialogCode(retryFrame) != "POL-0019" || LoginCheckpoints.NetworkDialogCode(checkedRetry) != "POL-0019" || GameUpdateWorkflow.Control(checkedRetry, "Retry") == null)
+                        throw new LoginSafetyException("The network dialog changed during the wait. No input was sent; POL remains open.");
+                    var retryDpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                    try { Click(checkedRetry, "Retry"); }
+                    finally { if (retryDpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(retryDpi); }
+                    previous = LoginCheckpoint.Unknown;
+                    stageSince = unknownSince = loadingPollUntil = DateTimeOffset.UtcNow;
+                    continue;
+                }
                 if (!memberSectionOnly && trainingSection == "" && GameUpdateWorkflow.Recognize(frame).Stage != GameUpdateStage.None)
                 {
                     var updateStarted = DateTimeOffset.UtcNow;
@@ -756,7 +838,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     throw new LoginSafetyException("The character retry returned to POL authentication. No credentials were resubmitted; the process remains open.");
                 if (stage == LoginCheckpoint.Error)
                 {
-                    if (!memberSectionOnly && (trainingSection == "" || recoveringDisconnect) && CharacterSessionBackoff.IsHeld(frame))
+                    if (!memberSectionOnly && (trainingSection is "" or "continue" || recoveringDisconnect) && CharacterSessionBackoff.IsHeld(frame))
                     {
                         await Task.Delay(500, cancellation);
                         var confirmedBusy = await ReadFrame(cancellation);
@@ -805,7 +887,8 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     }
                     var rejected = passwordEntered && LoginCheckpoints.IsCredentialRejection(frame);
                     LogPolPathEvent(rejected ? "CredentialRejected" : "PolError", stage);
-                    throw new LoginSafetyException(rejected ? "Could not validate user name or password. Please check." : "POL reported a login error. Automatic retries are paused.");
+                    var stoppedCode = LoginCheckpoints.MaintenanceErrorCode(frame);
+                    throw new LoginSafetyException(rejected ? "Could not validate user name or password. Please check." : stoppedCode == null ? "An unrecognized game error stopped login; the window remains open." : $"Login stopped on {stoppedCode}; the window remains open for recovery.");
                 }
                 if (characterConfirmAttempts > 0 && stage != LoginCheckpoint.CharacterConfirmation && stage != LoginCheckpoint.Characters)
                 {
@@ -1088,6 +1171,51 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
             }
             if (File.Exists(framePath)) File.Delete(framePath);
         }
+    }
+
+    private async Task ClearObscuringPanelAsync(CancellationToken cancellation)
+    {
+        var data = Path.Combine(Path.GetDirectoryName(config.WindowerPath)!, "addons", "FFXIManager", "data");
+        void RequireSuspicion()
+        {
+            if (!window.IsCharacterWindow(account.Character) || ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow))
+                throw new LoginSafetyException("The session changed or server traffic resumed; panel cleanup stopped.");
+        }
+        RequireSuspicion();
+        var initial = await ReadFrame(cancellation);
+        await Task.Delay(500, cancellation);
+        var confirmed = await ReadFrame(cancellation);
+        if (!LoginCheckpoints.HasHaupPanel(initial) || !LoginCheckpoints.HasHaupPanel(confirmed) || LoginCheckpoints.HasEmptyWindowerConsole(confirmed))
+            throw new LoginSafetyException("The obstructing panel changed or the console is already open. No command was typed.");
+        var profile = WindowsInstallationDiscovery.ResolveProfile(config.WindowerPath, account.Profile);
+        var settings = System.Xml.Linq.XDocument.Load(Path.Combine(Path.GetDirectoryName(config.WindowerPath)!, "settings.xml"));
+        var profiles = settings.Descendants("profile").Where(p => (string?)p.Attribute("name") == profile).ToArray();
+        if (profiles.Length != 1 || !string.Equals(profiles[0].Element("consolekey")?.Value, "Insert", StringComparison.OrdinalIgnoreCase))
+            throw new LoginSafetyException("Close the obstructing HaupBridge panel. Automatic cleanup requires the configured Insert console key.");
+        RequireSuspicion();
+        var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+        try { window.ToggleWindowerConsole(); }
+        finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+        await Task.Delay(500, cancellation);
+        var console = await ReadFrame(cancellation);
+        await Task.Delay(500, cancellation);
+        var checkedConsole = await ReadFrame(cancellation);
+        if (!LoginCheckpoints.HasEmptyWindowerConsole(console) || !LoginCheckpoints.HasEmptyWindowerConsole(checkedConsole))
+            throw new LoginSafetyException("Windower's empty console prompt was not verified. No command was typed.");
+        RequireSuspicion();
+        report("Closing the obstructing HaupBridge panel through the verified Windower console…");
+        dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+        try
+        {
+            window.Password("hbridge menu close", cancellation); // Fixed local UI command, never account data or chat.
+            window.Key(0x0d);
+            Thread.Sleep(300);
+            window.ToggleWindowerConsole();
+        }
+        finally { if (dpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(dpi); }
+        await Task.Delay(500, cancellation);
+        if (LoginCheckpoints.HasHaupPanel(await ReadFrame(cancellation)))
+            throw new LoginSafetyException("The HaupBridge panel still covers the dialog. Recovery paused without accepting it.");
     }
 
     private async Task<bool> AcknowledgeDisconnectAsync(CancellationToken cancellation)
