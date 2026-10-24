@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="FFXILauncher.Desktop.MainWindow" Title="FFXI Account Manager" Width="1120" Height="960" MinWidth="820" MinHeight="650" Background="{DynamicResource ThemeBackgroundBrush}" Foreground="{DynamicResource ThemeTextBrush}">
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" x:Class="FFXILauncher.Desktop.MainWindow" Title="FFXI Account Manager" Icon="avares://FFXILauncher.Desktop/Assets/AppIcon.ico" Width="1120" Height="960" MinWidth="820" MinHeight="650" Background="{DynamicResource ThemeBackgroundBrush}" Foreground="{DynamicResource ThemeTextBrush}">
   <Window.Styles>
     <Style Selector="Button.login-running">
       <Style.Animations>

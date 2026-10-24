@@ -299,6 +299,7 @@ if (args.Contains("--readme-images")) { ReadmeImages.Render(); return; }
 if (args.Contains("--art-concepts")) { ArtworkConcepts.Render(); return; }
 var directory = Path.Combine(Path.GetTempPath(), "ffxi-ui-" + Guid.NewGuid());
 var window = new MainWindow(directory, false);
+if (window.Icon == null) throw new Exception("The main window must load its bundled application icon.");
 window.Show();
 Dispatcher.UIThread.RunJobs();
 if (window.FindControl<TextBlock>("EmptyState")?.IsVisible != true) throw new Exception("Empty account state did not render.");

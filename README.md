@@ -14,6 +14,8 @@ POL auto login defaults to a native 640 × 480 client window. Toggle this under 
 
 Choose one of four dark UI themes or 12 artwork themes, including Abyssea. Expanded windows show a tall cropped art panel with a background behind the accounts; Amano · Autumn, Abyssea, Promyvion, and Original FFXI pair two different images. Disable Landscape cards for more translucent account cards; enable it for prominent landscape images with minimal shading. Shuffle uses every image before repeating and avoids duplicate visible cards while enough images are available. Images keep their aspect ratio. Drag the handle on each card to reorder accounts. **Auto login** controls whether a character's Launch profile button completes login. While auto login runs, its button pulses and becomes **Stop auto logins**. Click it to cancel the queue and active input while keeping POL and games open. Cancelled accounts remain paused for recovery until explicitly launched again. **Maintain connection** enables recovery; **Schedule server maintenance** plans downtime around applicable notices.
 
+The application icon introduced in **1.0.33** uses the approved watercolor crystal and winged key with subdued XI lettering. The same multi-size icon is embedded in the Windows executable and manager window; the desktop shortcut uses the installed executable icon. This packaging change preserves existing login validation.
+
 World Map, Zilart and Blue Illustration use a continuous panoramic background: the left panel reveals the adjoining artwork rather than repeating it.
 
 [See every theme at full size](docs/themes/README.md), including the narrow-window Abyssea view.

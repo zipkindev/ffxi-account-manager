@@ -81,6 +81,11 @@ internal static class AppPayload
         using var iconStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/Weather/Water.png"));
         using var icon = new Avalonia.Media.Imaging.Bitmap(iconStream);
         var nativeImageDecoded = icon.PixelSize.Width > 0 && icon.PixelSize.Height > 0;
+        using var applicationIconStream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://FFXILauncher.Desktop/Assets/AppIcon.ico"));
+        var applicationIcon = new Avalonia.Controls.WindowIcon(applicationIconStream);
+        using var encodedIcon = new MemoryStream();
+        applicationIcon.Save(encodedIcon);
+        if (encodedIcon.Length == 0) throw new IOException("Invalid bundled application icon.");
         var artworkThemesVerified = 0;
         foreach (var theme in ThemeCatalog.All.Where(t => t.Artwork != null))
         {
@@ -96,7 +101,7 @@ internal static class AppPayload
             artworkThemesVerified++;
         }
         var installSource = InstallSource();
-        return new { Version = AppRelease.Version, Standalone, SupportFilesVerified = count, ArtworkThemesVerified = artworkThemesVerified, NativeImageDecoded = nativeImageDecoded,
+        return new { Version = AppRelease.Version, Standalone, SupportFilesVerified = count, ArtworkThemesVerified = artworkThemesVerified, NativeImageDecoded = nativeImageDecoded, ApplicationIconDecoded = true,
             InstallerPrepared = System.IO.File.Exists(Path.Combine(installSource, "FFXILauncher.Desktop.exe")),
             LicensesAvailable = AppRelease.Licenses.Contains("MIT License"), BuildIdentity, LoginFlowFingerprint = Platform.LoginFlowCompatibility.Current };
     }

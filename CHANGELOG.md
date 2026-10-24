@@ -1,5 +1,10 @@
 # Release notes
 
+## 1.0.33
+
+- Add the approved watercolor crystal and winged-key application icon, with subdued XI background lettering, to the Windows executable, manager window and desktop shortcut. Embed native sizes from 16 to 256 pixels for Explorer and taskbar display.
+- Verify the bundled application icon in folder and standalone package checks. Login steps, recovery settings and login-flow compatibility remain unchanged.
+
 ## 1.0.32
 
 - Read release notes explicitly as UTF-8 so Windows release checks accept punctuation consistently.

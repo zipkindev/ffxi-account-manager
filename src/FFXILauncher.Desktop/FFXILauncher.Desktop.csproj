@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><OutputType>WinExe</OutputType><AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault></PropertyGroup>
+  <PropertyGroup><OutputType>WinExe</OutputType><ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon><AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault></PropertyGroup>
   <ItemGroup><Content Include="../../tools/windows-ocr.ps1" Link="tools/windows-ocr.ps1" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../tools/install-unattended.ps1" Link="tools/install-unattended.ps1" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="../../windower_addons/FFXIManager/FFXIManager.lua" Link="windower_addons/FFXIManager/FFXIManager.lua" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><InternalsVisibleTo Include="FFXILauncher.Desktop.Smoke" /></ItemGroup>
-  <ItemGroup><AvaloniaResource Include="Assets/Themes/*.jpg" /></ItemGroup>
+  <ItemGroup><AvaloniaResource Include="Assets/Themes/*.jpg" /><AvaloniaResource Include="Assets/AppIcon.ico" /></ItemGroup>
   <ItemGroup><AvaloniaResource Include="Assets/Weather/*.png" /><Content Include="Assets/Weather/SOURCES.md" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><Content Include="Assets/Themes/SOURCES.md" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
   <ItemGroup><EmbeddedResource Include="../../CHANGELOG.md" LogicalName="FFXILauncher.ReleaseNotes" /></ItemGroup>
