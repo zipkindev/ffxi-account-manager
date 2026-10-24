@@ -35,6 +35,7 @@ public sealed partial class MainWindow : Window
     private readonly HashSet<Guid> forcedClosed = [];
     private readonly Dictionary<Guid, CancellationTokenSource> accountCancellation = [];
     private readonly Dictionary<Guid, DateTimeOffset> nextRetry = [];
+    private readonly Dictionary<Guid, (ManagedProcess Process, DateTimeOffset NotBefore)> crashRecoveryDelay = [];
     private bool recoveryChecking;
     private readonly Dictionary<Guid, MaintenanceWindow> maintenanceRestarts = [];
     private readonly Dictionary<Guid, DateTimeOffset> nextMaintenanceInspection = [];
@@ -1208,6 +1209,8 @@ public sealed partial class MainWindow : Window
         if (!decision.Allowed) return decision.Reason + (decision.ResumeUtc is {} resume ? $" · resumes after {MaintenanceTimeDisplay.Instant(resume)}" : "");
         var readiness = disconnectRestarts.Contains(id) && WindowsLoginValidation.HasPriorValidation(dataRoot, account)
             ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
+        if (readiness == null && sessions.TryGetValue(id, out var process) && crashRecoveryDelay.TryGetValue(id, out var crash) && crash.Process == process && DateTimeOffset.UtcNow < crash.NotBefore)
+            return "Process exited · reconnecting in " + Math.Ceiling((crash.NotBefore - DateTimeOffset.UtcNow).TotalSeconds) + "s";
         return readiness ?? "Process exited · reconnect queued";
     }
     private void RefreshCharacterMaintenance()
@@ -1310,6 +1313,18 @@ public sealed partial class MainWindow : Window
                 var validateRecovery = disconnectRestarts.Contains(id) && WindowsLoginValidation.HasPriorValidation(dataRoot, account);
                 if ((validateRecovery ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account)) != null) continue;
                 if (!EvaluateRecovery(account).Allowed) continue;
+                if (CharacterSessionBackoff.RequiresCrashDelay(validateRecovery, maintenanceRestarts.ContainsKey(id)))
+                {
+                    if (!crashRecoveryDelay.TryGetValue(id, out var crash) || crash.Process != process)
+                    {
+                        var notBefore = DateTimeOffset.UtcNow + CharacterSessionBackoff.CrashRestartDelay;
+                        crashRecoveryDelay[id] = (process, notBefore);
+                        nextRetry[id] = notBefore;
+                        Log(account.Label + ": process exited unexpectedly; waiting two minutes for the server session to clear before reconnecting.");
+                        continue;
+                    }
+                    if (DateTimeOffset.UtcNow < crash.NotBefore) continue;
+                }
                 if (nextRetry.TryGetValue(id, out var retry) && DateTimeOffset.UtcNow < retry) continue;
                 nextRetry[id] = DateTimeOffset.UtcNow.AddSeconds(15 + Random.Shared.Next(15));
                 await RunAutoLogin(account, validateRecovery: validateRecovery);

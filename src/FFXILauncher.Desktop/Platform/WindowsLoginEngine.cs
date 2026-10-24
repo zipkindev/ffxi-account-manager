@@ -284,7 +284,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                 var resumed = await ReadFrame(cancellation);
                 if (trainingSection == "play" || !(window.IsGameWindow || window.IsCharacterWindow(account.Character)) ||
                     (LoginCheckpoints.Recognize(resumed) is not (LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation) &&
-                     !LoginCheckpoints.CanOpenDefaultCharacterConfirmation(resumed) && !LoginCheckpoints.CanOpenCharacterList(resumed) &&
+                     !LoginCheckpoints.CanOpenDefaultCharacterConfirmation(resumed) && !LoginCheckpoints.CanOpenCharacterList(resumed) && !CharacterSessionBackoff.IsHeld(resumed) &&
                      !(trainingSection == "character" && LoginCheckpoints.ConfirmationCancelPoint(resumed, account.Character) != null)))
                     throw new LoginSafetyException("No matching authenticated training proof or reversible FFXI menu. Credentials will not be entered.");
                 resumedMenu = resumed;
@@ -361,6 +361,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
         var confirmationSentAt = DateTimeOffset.MinValue;
         var titleEnteredAt = DateTimeOffset.MinValue;
         GameSession? worldObservation = null;
+        var sessionBackoff = new CharacterSessionBackoff();
         bool CanReplaySuccessfulDefault() => trainingSection == "" && identityVerified && passwordEntered &&
             titleEnteredAt != DateTimeOffset.MinValue && replayPath != null && confirmations.HasReplay;
         void ReplaySuccessfulDefault()
@@ -411,6 +412,12 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                                     var confirmed = await ReadFrame(cancellation);
                                     if (error == LoginCheckpoints.MaintenanceErrorCode(confirmed))
                                     {
+                                        if (CharacterSessionBackoff.IsHeld(confirmed))
+                                        {
+                                            characterConfirmed = false;
+                                            worldObservation = null;
+                                            continue;
+                                        }
                                         InspectedErrorCode = error;
                                         InspectedCredentialRejection = LoginCheckpoints.IsCredentialRejection(confirmed);
                                         NeedsFreshRestart = true;
@@ -745,8 +752,44 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                 unknownSince = DateTimeOffset.UtcNow;
                 if (confirmationRecoveryUsed && !characterConfirmed && stage is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
                     timing.InvalidateReplayPath();
+                if (sessionBackoff.Attempts > 0 && stage is LoginCheckpoint.MemberList or LoginCheckpoint.MemberInformation or LoginCheckpoint.Connect or LoginCheckpoint.PasswordEditor)
+                    throw new LoginSafetyException("The character retry returned to POL authentication. No credentials were resubmitted; the process remains open.");
                 if (stage == LoginCheckpoint.Error)
                 {
+                    if (!memberSectionOnly && (trainingSection == "" || recoveringDisconnect) && CharacterSessionBackoff.IsHeld(frame))
+                    {
+                        await Task.Delay(500, cancellation);
+                        var confirmedBusy = await ReadFrame(cancellation);
+                        if (!CharacterSessionBackoff.IsHeld(confirmedBusy)) continue;
+                        var delay = sessionBackoff.ReserveRetry();
+                        report($"The server still holds the previous character session. Waiting one minute before retry {sessionBackoff.Attempts}/{CharacterSessionBackoff.MaximumRetries}…");
+                        await Task.Delay(delay, cancellation);
+                        deadline += delay;
+                        var stillBusy = await ReadFrame(cancellation);
+                        await Task.Delay(500, cancellation);
+                        var checkedBusy = await ReadFrame(cancellation);
+                        if (!CharacterSessionBackoff.IsHeld(stillBusy) || !CharacterSessionBackoff.IsHeld(checkedBusy))
+                            throw new LoginSafetyException("The reconnect dialog changed during the wait. No input was sent; the process remains open.");
+                        var busyDpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                        try
+                        {
+                            if (checkedBusy.UniqueLine("OK") != null) Click(checkedBusy, "OK");
+                            else window.ConfirmGameSelection(); // Default OK on the twice-confirmed 3201 dialog.
+                        }
+                        finally { if (busyDpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(busyDpi); }
+                        characterConfirmed = selectedCharacterVerified = false;
+                        characterConfirmAttempts = 0;
+                        confirmationRecoveryUsed = false;
+                        confirmationSentAt = DateTimeOffset.MinValue;
+                        worldObservation = null;
+                        replayPath = null;
+                        titleEnteredAt = DateTimeOffset.MinValue;
+                        previous = LoginCheckpoint.Unknown;
+                        stageSince = unknownSince = loadingPollUntil = DateTimeOffset.UtcNow;
+                        enterRetries.Clear(); visits.Clear();
+                        report("Retrying the configured character in the same process; POL credentials will not be resubmitted…");
+                        continue;
+                    }
                     if (recoveringDisconnect)
                     {
                         var first = LoginCheckpoints.MaintenanceErrorCode(frame);
@@ -1076,6 +1119,7 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                 var confirmed = await ReadFrame(cancellation);
                 if (DisconnectRecovery.Followup(nextCode, LoginCheckpoints.MaintenanceErrorCode(confirmed), LoginCheckpoints.Recognize(confirmed)) == DisconnectFollowup.FreshRestart)
                 {
+                    if (CharacterSessionBackoff.IsHeld(confirmed)) return true;
                     InspectedErrorCode = nextCode;
                     InspectedCredentialRejection = LoginCheckpoints.IsCredentialRejection(confirmed);
                     NeedsFreshRestart = true;

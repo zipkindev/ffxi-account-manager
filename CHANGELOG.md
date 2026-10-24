@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.31
+
+- After an unexpected process exit, wait two minutes before automatic restart to give the server time to clear the old character session. Confirmed disconnect cleanup and scheduled maintenance keep their existing restart paths.
+- Recognize FFXI-3201 only with matching held-session wording. Confirm it twice, wait one minute, confirm the same dialog again, acknowledge it and retry the configured character in the same process. Limit this to five retries; never retype POL credentials or force-close this dialog.
+- Preserve reviewed login compatibility while adding the bounded server-session retry. Mini-only live trials passed both an intentionally early reconnect through 3201 and automatic restart after the two-minute delay, preserving the other three sessions. This is not a claim about a fixed server timeout. The maintenance updater still awaits its separate live patch trial.
+
 ## 1.0.30
 
 - Prepare a guarded updater branch during full POL login: recognize version-update availability, confirmation, file checks, downloads, installation and completion before returning to the normal character/world verification route.

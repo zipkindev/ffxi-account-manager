@@ -5,6 +5,17 @@ internal static class GameUpdateRegression
     internal static void Run(Action<bool, string> check)
     {
         static LoginFrame Frame(params string[] text) => new(640,480,text.Select((t,i)=>new OcrLine(t,[new(t,320,160+i*30,100,20)])).ToArray());
+        var held=Frame("Error code: FFXI-3201","Same character is already logged in.","Please wait a few minutes before trying to reconnect.","OK");
+        check(CharacterSessionBackoff.IsHeld(held),"3201 requires numeric code and held-session wording");
+        check(!CharacterSessionBackoff.IsHeld(Frame("Error code: FFXI-3202","Same character is already logged in.","Please wait a few minutes before trying to reconnect.")),"different error code cannot authorize character retry");
+        check(!CharacterSessionBackoff.IsHeld(Frame("Error code: FFXI-3201","Incorrect password")),"3201 without held-session wording cannot authorize retry");
+        var backoff=new CharacterSessionBackoff();
+        for(var attempt=0;attempt<CharacterSessionBackoff.MaximumRetries;attempt++)check(backoff.ReserveRetry()==TimeSpan.FromMinutes(1),"held session retries wait one minute");
+        try{backoff.ReserveRetry();check(false,"held session retries must be bounded");}catch(InvalidOperationException){check(backoff.Attempts==5,"held-session retry exhaustion preserves the bound");}
+        check(CharacterSessionBackoff.RequiresCrashDelay(false,false),"unexpected exit requires server-session cooldown");
+        check(!CharacterSessionBackoff.RequiresCrashDelay(true,false),"confirmed disconnect cleanup keeps its established restart path");
+        check(!CharacterSessionBackoff.RequiresCrashDelay(false,true),"scheduled maintenance restart does not add a crash delay");
+        check(CharacterSessionBackoff.CrashRestartDelay==TimeSpan.FromMinutes(2),"crash cooldown uses the initial two-minute trial setting");
         var available=Frame("Version Update","A version update is necessary.","Update","Cancel");
         var start=GameUpdateWorkflow.Recognize(available);
         check(GameUpdateWorkflow.Recognize(Frame("Version Update","Update","Cancel")).Button=="Update","official updater heading and exact Update control work with partial body OCR");
