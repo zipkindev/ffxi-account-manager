@@ -54,6 +54,7 @@ jobs:
           if ($result.LoginFlowFingerprint -notmatch '^[A-F0-9]{64}$' -or $result.LoginFlowFingerprint -cne $folderResult.LoginFlowFingerprint) { throw 'Packaging changed login-flow compatibility.' }
       - uses: actions/upload-artifact@v4
         with:
+          retention-days: 7
           name: ffxi-account-manager-windows-x64
           path: |
             artifacts/windows-x64/

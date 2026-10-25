@@ -1,0 +1,378 @@
+name: Remove archived Actions artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/artifact-cleanup.yml
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: verified-artifact-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      # Every listed artifact was saved privately and checked against its upstream
+      # SHA-256 and ZIP/gzip integrity before this manifest was committed.
+      # The explicit list supports safe retries without selecting new artifacts.
+      - name: Remove only the verified archived copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFIED_ARCHIVE_MANIFEST: |
+            {
+              "repository": "zipkindev/ffxi-account-manager",
+              "cutoff": "2026-10-18T05:42:46.000Z",
+              "artifacts": [
+                {
+                  "id": 11789923549,
+                  "digest": "sha256:c942689f9edaffd2cd551894fa73b7b6a9d82dd7e496fc5f2f95ea1f5d347e1f",
+                  "size_in_bytes": 184536295,
+                  "run_id": 38348454149,
+                  "verified": true
+                },
+                {
+                  "id": 11788853299,
+                  "digest": "sha256:23ab10943ed97ee39ab5d47188201043f4d2d2af0dc9326c5b43b5b8db550afe",
+                  "size_in_bytes": 184536295,
+                  "run_id": 38347803328,
+                  "verified": true
+                },
+                {
+                  "id": 11787974938,
+                  "digest": "sha256:e0e457fad968981e2f1c17b6fd4dbd9d1b9dcca4e3cdf6dc64941279782d5a5f",
+                  "size_in_bytes": 184528029,
+                  "run_id": 38345813707,
+                  "verified": true
+                },
+                {
+                  "id": 11771779963,
+                  "digest": "sha256:4f5e2f2568bcd23e429f54f1cc892f661d7c232b4364f4156101876ed85ccbec",
+                  "size_in_bytes": 184527974,
+                  "run_id": 38304457382,
+                  "verified": true
+                },
+                {
+                  "id": 11771119916,
+                  "digest": "sha256:c7085bf3ae66fb1fb2e252b8289123e48a7d603a5d98111301e1c9af4a1883fb",
+                  "size_in_bytes": 184527974,
+                  "run_id": 38304135679,
+                  "verified": true
+                },
+                {
+                  "id": 11769972191,
+                  "digest": "sha256:0c2aa1ef8c0e213bdfcb4dc634d4cd11ac8dbe1fa063cd4c2c6e2971547080ec",
+                  "size_in_bytes": 184528409,
+                  "run_id": 38298933901,
+                  "verified": true
+                },
+                {
+                  "id": 11769800081,
+                  "digest": "sha256:fd7b064e939f6a56937588d00d6026b91cfdc5a3eb011a45a00634cf61c2297f",
+                  "size_in_bytes": 184528409,
+                  "run_id": 38297596293,
+                  "verified": true
+                },
+                {
+                  "id": 11765592361,
+                  "digest": "sha256:0d48e840d83b2ba8ed3a0df244a32a48d550f5111842d7c4de47040cdcf44fc4",
+                  "size_in_bytes": 184526214,
+                  "run_id": 38290945976,
+                  "verified": true
+                },
+                {
+                  "id": 11761258178,
+                  "digest": "sha256:9eb12fa4d70cb3842b76bf5461659c4072ff80ea79886b3a226708a6bc3684a7",
+                  "size_in_bytes": 184524073,
+                  "run_id": 38281351756,
+                  "verified": true
+                },
+                {
+                  "id": 11759663482,
+                  "digest": "sha256:02163467b6d35f6165c235218f0cc73bd121cb3e48dacc01436990365d55fed6",
+                  "size_in_bytes": 184520577,
+                  "run_id": 38278296950,
+                  "verified": true
+                },
+                {
+                  "id": 11760460928,
+                  "digest": "sha256:f5cc3847259bc314c8e3e15d4b639641e633168de11764d7ecbcf28e393917d4",
+                  "size_in_bytes": 184520577,
+                  "run_id": 38278296886,
+                  "verified": true
+                },
+                {
+                  "id": 11751904377,
+                  "digest": "sha256:6cc4c19521dbb189be2c187c111d3c196bfcd9b79d747bc60526dbcff5b35836",
+                  "size_in_bytes": 184512972,
+                  "run_id": 38261172904,
+                  "verified": true
+                },
+                {
+                  "id": 11752930721,
+                  "digest": "sha256:94663e0a14cab15ec64e49aa8fa42a27e8a7d2568338a0364e2be8b0f02b1a3f",
+                  "size_in_bytes": 184512972,
+                  "run_id": 38261172141,
+                  "verified": true
+                },
+                {
+                  "id": 11750998004,
+                  "digest": "sha256:1d66e7db33b06b034171e6899861e295df0119245183a732b7b7ad9b3968524a",
+                  "size_in_bytes": 163809962,
+                  "run_id": 38258861642,
+                  "verified": true
+                },
+                {
+                  "id": 11752325677,
+                  "digest": "sha256:46edbad904999319088200e8339aa3251d1c910d6abfc3be597930ba32389923",
+                  "size_in_bytes": 163809962,
+                  "run_id": 38258861404,
+                  "verified": true
+                },
+                {
+                  "id": 11750492422,
+                  "digest": "sha256:782d048a4ce8fe813bf4aff700d32ad9ca2cdb56bb6d21a47207178cdd4b162d",
+                  "size_in_bytes": 161594536,
+                  "run_id": 38256449718,
+                  "verified": true
+                },
+                {
+                  "id": 11750258189,
+                  "digest": "sha256:56562f812fb188ca6711e879b200e248d3f3d79ace5195e76aa49783c41dbf3c",
+                  "size_in_bytes": 161594536,
+                  "run_id": 38256448912,
+                  "verified": true
+                },
+                {
+                  "id": 11748742132,
+                  "digest": "sha256:21d898931a4370ed6975822abc1fd03f986ae1448fe31bf6101893518086fb4c",
+                  "size_in_bytes": 156844568,
+                  "run_id": 38252490010,
+                  "verified": true
+                },
+                {
+                  "id": 11749321475,
+                  "digest": "sha256:845fd6e73c09abc8be1275cb2744ab7bd85a86614c5a80a9f71b0ce150e8ad23",
+                  "size_in_bytes": 156844568,
+                  "run_id": 38252489156,
+                  "verified": true
+                },
+                {
+                  "id": 11747048705,
+                  "digest": "sha256:af3281df59b85eb69f46298efe007f1d11c7830a6cc4c649fb7367fc9f7083a3",
+                  "size_in_bytes": 148349719,
+                  "run_id": 38250517787,
+                  "verified": true
+                },
+                {
+                  "id": 11747744093,
+                  "digest": "sha256:de0410c82f66aee07c73ec1f96c6e8be453d3285b32da8c58db788634df945b9",
+                  "size_in_bytes": 148349719,
+                  "run_id": 38250514974,
+                  "verified": true
+                },
+                {
+                  "id": 11740218994,
+                  "digest": "sha256:554da78976cbacbca9c70c1c78b5475645bd4030f3fa15bb85854ecf8d447a6b",
+                  "size_in_bytes": 148349561,
+                  "run_id": 38235495425,
+                  "verified": true
+                },
+                {
+                  "id": 11740895482,
+                  "digest": "sha256:9bdbf16a84a5b75adfa938598ddb943891ca91448d443800cbdee830560f6365",
+                  "size_in_bytes": 148349561,
+                  "run_id": 38235495231,
+                  "verified": true
+                },
+                {
+                  "id": 11739008044,
+                  "digest": "sha256:6951b2f128e83eb6bf675030a5e3825a561cb8f84e0a12a2a65aa9f36fb321a1",
+                  "size_in_bytes": 148341799,
+                  "run_id": 38232173747,
+                  "verified": true
+                },
+                {
+                  "id": 11738893351,
+                  "digest": "sha256:9e498e83768e362dc71d17a5935e7bdc4ae3e42b348e12cc0f3cf996b22125f8",
+                  "size_in_bytes": 148341799,
+                  "run_id": 38232173534,
+                  "verified": true
+                },
+                {
+                  "id": 11737434929,
+                  "digest": "sha256:0289b2ab6f4783f345fda3545bbf1599de901a6f2d9076ac1bfafad8ec69af38",
+                  "size_in_bytes": 148342132,
+                  "run_id": 38230144511,
+                  "verified": true
+                },
+                {
+                  "id": 11738590108,
+                  "digest": "sha256:3dd2ea309e671e627129beaf0efe616ba61bbb1769f529c4866b7f619a708f42",
+                  "size_in_bytes": 148342132,
+                  "run_id": 38230144292,
+                  "verified": true
+                },
+                {
+                  "id": 11737951491,
+                  "digest": "sha256:fc69505e5c3df6ff58d2c17b7832a509f38a182eaec93955940d6efcff0e5be9",
+                  "size_in_bytes": 148337517,
+                  "run_id": 38228969390,
+                  "verified": true
+                },
+                {
+                  "id": 11737537575,
+                  "digest": "sha256:da1233fb91f52dc5dfdd25a24156e145a3476f927c081c11bad3b1204d226657",
+                  "size_in_bytes": 148337517,
+                  "run_id": 38228969208,
+                  "verified": true
+                },
+                {
+                  "id": 11737157011,
+                  "digest": "sha256:2fd8786b25f6fde2cda6c7edf45760a6dce3716239198d122047235b2338cc66",
+                  "size_in_bytes": 148337409,
+                  "run_id": 38228384321,
+                  "verified": true
+                },
+                {
+                  "id": 11737796125,
+                  "digest": "sha256:d29a14ec0a087bef059bb8f2c32ab25ce3a9b9e2f3b656cec406862a84d28d27",
+                  "size_in_bytes": 148337409,
+                  "run_id": 38228384254,
+                  "verified": true
+                },
+                {
+                  "id": 11735813380,
+                  "digest": "sha256:b03f3eb4559621484486f7b746495db07089d62d2380d8ec087b9794e2859ddc",
+                  "size_in_bytes": 148334296,
+                  "run_id": 38226751355,
+                  "verified": true
+                },
+                {
+                  "id": 11736574093,
+                  "digest": "sha256:3f9428f3a8faa565cebf5808b4fa65927a5779a9c04c77e2887de5617257d5a5",
+                  "size_in_bytes": 148334296,
+                  "run_id": 38226751155,
+                  "verified": true
+                },
+                {
+                  "id": 11722903072,
+                  "digest": "sha256:96c020b3e54a5d4ce71782daba4aeaa99041490d5bdf1073a2bda79ebd6a0691",
+                  "size_in_bytes": 150564565,
+                  "run_id": 38194156605,
+                  "verified": true
+                },
+                {
+                  "id": 11722472387,
+                  "digest": "sha256:3008809f83ab19e4f1022848bc323ae342fb1587dcb41e8b2c30221decc36b18",
+                  "size_in_bytes": 150564565,
+                  "run_id": 38194156315,
+                  "verified": true
+                },
+                {
+                  "id": 11722736046,
+                  "digest": "sha256:e184cf00407e37b6ab420c0c9a0536ad147591eef1049790d368e35d389a3261",
+                  "size_in_bytes": 91080593,
+                  "run_id": 38193376056,
+                  "verified": true
+                },
+                {
+                  "id": 11718918334,
+                  "digest": "sha256:01a068dd8da95fa5ce4ccdf40e822f866fc9493d534e7e3fb3d7f1330ca9f78e",
+                  "size_in_bytes": 91080635,
+                  "run_id": 38184946280,
+                  "verified": true
+                },
+                {
+                  "id": 11718579584,
+                  "digest": "sha256:89c3253b4ea240e096452bb513719c31617e5d98cdcab393da12540729331d71",
+                  "size_in_bytes": 91080635,
+                  "run_id": 38184946117,
+                  "verified": true
+                },
+                {
+                  "id": 11719260620,
+                  "digest": "sha256:247774544ea99312c3772b2a782ba444fc0396dff207065561f3ab193804d54b",
+                  "size_in_bytes": 90840806,
+                  "run_id": 38184200461,
+                  "verified": true
+                }
+              ]
+            }
+        run: |
+          python3 - <<'PY'
+          """Delete only the explicit artifact IDs in a previously verified archive manifest."""
+          import datetime
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+          
+          
+          def delete_archived(snapshot, repository, request):
+              if repository != snapshot['repository']:
+                  raise ValueError('Repository does not match the verified archive')
+              cutoff = datetime.datetime.fromisoformat(snapshot['cutoff'])
+              completed = set()
+              deleted = 0
+              for expected in snapshot['artifacts']:
+                  artifact_id = int(expected['id'])
+                  endpoint = f'/actions/artifacts/{artifact_id}'
+                  try:
+                      current = request(endpoint)
+                  except urllib.error.HTTPError as error:
+                      if error.code == 404:
+                          print(f'Already absent: {artifact_id}', flush=True)
+                          continue
+                      raise
+                  created = datetime.datetime.fromisoformat(current['created_at'].replace('Z', '+00:00'))
+                  if (not expected['verified'] or not expected['digest'].startswith('sha256:')
+                          or current['id'] != artifact_id
+                          or current.get('digest') != expected['digest']
+                          or current['size_in_bytes'] != expected['size_in_bytes']
+                          or current['workflow_run']['id'] != expected['run_id']
+                          or created >= cutoff):
+                      raise ValueError(f'Artifact {artifact_id} differs from the verified archive; keeping hosted copy')
+                  run_id = expected['run_id']
+                  if run_id not in completed:
+                      if request(f'/actions/runs/{run_id}')['status'] != 'completed':
+                          raise ValueError(f'Run {run_id} is still active; keeping hosted artifact')
+                      completed.add(run_id)
+                  request(endpoint, 'DELETE')
+                  deleted += 1
+                  print(f'Removed archived artifact {artifact_id}', flush=True)
+              return deleted
+          
+          
+          def main():
+              repository = os.environ['GITHUB_REPOSITORY']
+              snapshot = json.loads(os.environ['VERIFIED_ARCHIVE_MANIFEST'])
+              token = os.environ['GH_TOKEN']
+          
+              def request(endpoint, method='GET'):
+                  url = f'https://api.github.com/repos/{repository}' + endpoint
+                  with urllib.request.urlopen(urllib.request.Request(url, method=method, headers={
+                      'Authorization': 'Bearer ' + token,
+                      'Accept': 'application/vnd.github+json',
+                      'X-GitHub-Api-Version': '2022-11-28',
+                      'User-Agent': 'verified-artifact-cleanup',
+                  }), timeout=120) as response:
+                      return json.load(response) if method == 'GET' else None
+          
+              deleted = delete_archived(snapshot, repository, request)
+              summary = f'Removed {deleted} artifacts from the verified archive manifest; evidence remains in the private local archive.\n'
+              print(summary)
+              with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as stream:
+                  stream.write(summary)
+          
+          
+          if __name__ == '__main__':
+              main()
+          PY
