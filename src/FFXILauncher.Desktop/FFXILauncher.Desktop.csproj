@@ -47,6 +47,7 @@
     <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginTimingCache.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginTimingCache.cs" />
     <EmbeddedResource Include="../../src/FFXILauncher.Core/LoginTrainingLedger.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/LoginTrainingLedger.cs" />
     <EmbeddedResource Include="../../src/FFXILauncher.Core/ShutdownIpc.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/ShutdownIpc.cs" />
+    <EmbeddedResource Include="../../src/FFXILauncher.Core/DisconnectRecovery.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/DisconnectRecovery.cs" />
     <EmbeddedResource Include="../../src/FFXILauncher.Core/CharacterSessionBackoff.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/CharacterSessionBackoff.cs" />
     <EmbeddedResource Include="../../src/FFXILauncher.Core/GameUpdateWorkflow.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Core/GameUpdateWorkflow.cs" />
     <EmbeddedResource Include="../../src/FFXILauncher.Desktop/Platform/WindowsGameUpdater.cs" LogicalName="FFXILauncher.LoginFlow.src/FFXILauncher.Desktop/Platform/WindowsGameUpdater.cs" />

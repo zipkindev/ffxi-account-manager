@@ -782,6 +782,25 @@ if (OperatingSystem.IsWindows())
             File.WriteAllLines(correct, ["1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString()]);
             adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
             if (!HasPid()) throw new Exception("Fresh heartbeat appearing after startup must attach existing configured account.");
+            var state = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".state");
+            var connection = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".connection");
+            var header = new[] { "1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString() };
+            File.WriteAllLines(state, header.Concat(new[] { "100", "100", "50", "50", "0", "100", "Fixture zone", "0" }));
+            File.WriteAllLines(connection, header.Append(now.ToString()));
+            refresh.Invoke(lateWindow, null);
+            string LiveStatus() => lateWindow.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionStatus_" + lateAccount.Id.ToString("N")).Text!;
+            if (!LiveStatus().Contains("Connected") || LiveStatus().Contains("unverified")) throw new Exception("Matching fresh character and server reports must show Connected, including when Maintain connection is off.");
+            var hints = (Dictionary<Guid, string>)typeof(MainWindow).GetField("connectionStates", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(lateWindow)!;
+            hints[lateAccount.Id] = "Disconnected (FFXI-4001) · reconnecting…";
+            refresh.Invoke(lateWindow, null);
+            if (!LiveStatus().Contains("Disconnected")) throw new Exception("A confirmed disconnect must take precedence over a still-rendering heartbeat.");
+            hints.Clear();
+            File.Delete(correct); refresh.Invoke(lateWindow, null);
+            if (LiveStatus().Contains("Connected")) throw new Exception("An absent fresh heartbeat cannot retain Connected from the report cache.");
+            File.WriteAllLines(correct, header.Select((v, i) => i == 3 ? new DateTimeOffset(uniqueGame.Process.StartedUtc).AddMinutes(-1).ToUnixTimeSeconds().ToString() : v));
+            refresh.Invoke(lateWindow, null);
+            if (LiveStatus().Contains("Connected")) throw new Exception("Old-process reports cannot verify a replacement process.");
+            Console.WriteLine("PASS: real dashboard status uses fresh process/session-bound reports, retains disconnect priority, and rejects missing/old-process evidence without game input.");
             Console.WriteLine("PASS: late addon attachment refreshes known-world accounts; missing/wrong-world heartbeats rejected. Only isolated telemetry and read-only process inspection used.");
         }
         finally { lateWindow.Close(); Directory.Delete(lateDirectory, true); }

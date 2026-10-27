@@ -25,6 +25,28 @@ public sealed record ServerTrafficSample(DateTimeOffset ReportedUtc, DateTimeOff
         now - ReportedUtc <= TimeSpan.FromSeconds(45) && ReportedUtc - LastIncomingUtc <= TimeSpan.FromSeconds(90);
 }
 
+// Share the report read between the dashboard and recovery watchdog. A changed
+// process or character session must never inherit another session's evidence.
+public sealed class ServerTrafficCache
+{
+    private sealed record Entry(string Directory, ManagedProcess Process, string Nonce, DateTimeOffset RegisteredUtc,
+        string Character, string World, DateTimeOffset CheckedUtc, ServerTrafficSample? Sample);
+    private readonly Dictionary<Guid, Entry> entries = [];
+    public ServerTrafficSample? Read(string directory, AccountConfiguration account, ManagedProcess process, GameSession? session, DateTimeOffset now)
+    {
+        if (session == null || session.RegisteredUtc < process.StartedUtc.AddSeconds(-2) ||
+            !session.Character.Equals(account.Character, StringComparison.OrdinalIgnoreCase) ||
+            !session.World.Equals(account.World, StringComparison.OrdinalIgnoreCase)) return null;
+        if (entries.TryGetValue(account.Id, out var old) && old.Directory == directory && old.Process == process &&
+            old.Nonce == session.Nonce && old.RegisteredUtc == session.RegisteredUtc &&
+            old.Character == account.Character && old.World == account.World &&
+            now >= old.CheckedUtc && now - old.CheckedUtc < TimeSpan.FromSeconds(30)) return old.Sample;
+        var sample = ServerTraffic.Read(directory, account, session, now);
+        entries[account.Id] = new(directory, process, session.Nonce, session.RegisteredUtc, account.Character, account.World, now, sample);
+        return sample;
+    }
+}
+
 // Missing files during the addon's replace operation must not steal focus.
 // Any healthy sample resets suspicion; process replacement starts a new wait.
 public sealed class ConnectionInspectionGate

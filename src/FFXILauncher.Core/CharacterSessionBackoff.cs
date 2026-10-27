@@ -2,10 +2,11 @@ namespace FFXILauncher.Core;
 
 public sealed class CharacterSessionBackoff
 {
-    public static readonly TimeSpan CrashRestartDelay = TimeSpan.FromMinutes(2);
+    public static readonly TimeSpan CrashRestartDelay = TimeSpan.FromMinutes(1);
     public static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
     public const int MaximumRetries = 5;
     public static bool RequiresCrashDelay(bool confirmedDisconnect, bool scheduledMaintenance) => !confirmedDisconnect && !scheduledMaintenance;
+    public static TimeSpan CleanupRestartDelay(bool forceClosedHung) => forceClosedHung ? CrashRestartDelay : TimeSpan.Zero;
     public int Attempts { get; private set; }
     public TimeSpan ReserveRetry()
     {

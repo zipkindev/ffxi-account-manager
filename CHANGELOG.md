@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.34
+
+- Show Connected with the character/world when fresh session-bound character and server reports verify the tracked process, replacing the unconditional login-unverified label. Share connection-report reads with recovery at the existing 30-second cadence.
+- Start fresh login after confirmed disconnect cleanup without the extra random delay. Keep a one-minute cooldown for unexpected exits and force-closed hung clients; only a confirmed FFXI-3201 adds the existing bounded one-minute character-entry retries. POL-1039 external-login handling is unchanged.
+- Preserve reviewed login validation for the unchanged normal credential and character-selection route.
+
 ## 1.0.33
 
 - Add the approved watercolor crystal and winged-key application icon, with a transparent background and faintly refracted XI lettering, to the Windows executable, manager window and desktop shortcut. Embed native sizes from 16 to 256 pixels for Explorer and taskbar display.

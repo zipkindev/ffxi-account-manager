@@ -12,7 +12,7 @@ internal static class LoginFlowCompatibility
     {
         var assembly = typeof(LoginFlowCompatibility).Assembly;
         var names = assembly.GetManifestResourceNames().Where(n => n.StartsWith(Prefix, StringComparison.Ordinal)).Order(StringComparer.Ordinal).ToArray();
-        if (names.Length != 16) throw new InvalidOperationException("Login compatibility inputs are incomplete.");
+        if (names.Length != 17) throw new InvalidOperationException("Login compatibility inputs are incomplete.");
         var inputs = names.Select(name =>
         {
             using var stream = assembly.GetManifestResourceStream(name)!;
@@ -39,11 +39,12 @@ internal static class LoginFlowCompatibility
     // handling changed, but did not change credentials or character selection.
     // Only these exact build IDs may carry legacy proofs into this baseline;
     // a later login-source change automatically disables this bridge.
-    private const string LegacyBaseline = "52485999551FE825768BE1E6A7DECC53B5DD845F0752B8CB43C029CAC46179FA";
+    private const string LegacyBaseline = "C3D0B849EBEE014687E01AC08CE403A0EC6A3AC658CDF2341B49F3D393CF96D9";
     // The reviewed 1.0.29–1.0.31 normal credential and character routes remain.
     // This baseline adds specific network dialogs and their bounded Retry path.
     internal static bool AcceptsPriorFlow(string? flow) => Current == LegacyBaseline &&
-        flow is "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527" or
+        flow is "52485999551FE825768BE1E6A7DECC53B5DD845F0752B8CB43C029CAC46179FA" or
+        "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527" or
         "F2BE03AFEEEBF06CA0BAC58EDAFCEABD3918ADBC30EE6A389AA74A75F223F8EF" or
         "002CC3AE781E98BB77C9BE94A602E64BDA5881A9A690203DC413E728FCE33821" or
         "1C14E14E89B3D42A0D07BA5F4C9D88CD3FADBBCAD3EC151B916CD87EF117F9FA";

@@ -41,6 +41,8 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<Guid, DateTimeOffset> nextMaintenanceInspection = [];
     private readonly Dictionary<ManagedProcess, DateTimeOffset> nextConnectionInspection = [];
     private readonly ConnectionInspectionGate connectionInspectionGate = new();
+    private readonly ServerTrafficCache serverTrafficCache = new();
+    private readonly HashSet<Guid> verifiedGameSessions = [];
     private readonly Dictionary<ManagedProcess, DateTimeOffset> unresponsiveSince = [];
     private readonly HashSet<Guid> disconnectRestarts = [];
     private readonly HashSet<Guid> connectionChecks = [];
@@ -1060,7 +1062,8 @@ public sealed partial class MainWindow : Window
                 SessionHealth.Exited => forcedClosed.Contains(id) ? "Stopped · forced cleanup complete" : intentionallyStopped.Contains(id) ? "Intentionally stopped" : RecoveryStatus(id),
                 SessionHealth.Unresponsive => $"PID {process.Pid} · window not responding; observing",
                 SessionHealth.Unknown => $"PID {process.Pid} · health unavailable",
-                _ => shuttingDown.Contains(id) ? $"PID {process.Pid} · waiting for graceful shutdown" : $"PID {process.Pid} · process running; character login unverified"
+                _ => shuttingDown.Contains(id) ? $"PID {process.Pid} · waiting for graceful shutdown" :
+                    verifiedGameSessions.Contains(id) ? $"PID {process.Pid} · Connected · {paused.Character} ({paused.World})" : $"PID {process.Pid} · Process running"
             };
         }
         foreach (var id in uncertain) if (statuses.TryGetValue(id, out var status)) status.Text = "Needs attention · launch unresolved";
@@ -1086,12 +1089,16 @@ public sealed partial class MainWindow : Window
         foreach (var account in configuration.ConfiguredAccounts)
         {
             if (!characterStates.TryGetValue(account.Id, out var text)) continue;
+            verifiedGameSessions.Remove(account.Id);
             try
             {
                 var state = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new CharacterStateReader(data).Read(account, now);
                 var heartbeat = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new ShutdownIpc(data).ReadSession(account, now);
                 if (heartbeat != null && sessions.TryGetValue(account.Id, out var tracked) && heartbeat.RegisteredUtc < tracked.StartedUtc.AddSeconds(-2)) heartbeat = null;
                 var live = state != null && state.LoggedOutUtc == null && heartbeat?.Nonce == state.Nonce && now - state.ReportedUtc <= TimeSpan.FromSeconds(75);
+                if (live && data != null && sessions.TryGetValue(account.Id, out var process) &&
+                    serverTrafficCache.Read(data, account, process, heartbeat, now)?.IsRecent(now) == true)
+                    verifiedGameSessions.Add(account.Id);
                 text.Text = !live && heartbeat != null ? "Current · Alive · player stats pending" :
                     state?.Describe(live, includeEnvironment: false) ?? "Player data pending · deploy/reload FFXIManager";
                 if (characterWeather.TryGetValue(account.Id, out var weather))
@@ -1366,7 +1373,7 @@ public sealed partial class MainWindow : Window
                         var notBefore = DateTimeOffset.UtcNow + CharacterSessionBackoff.CrashRestartDelay;
                         crashRecoveryDelay[id] = (process, notBefore);
                         nextRetry[id] = notBefore;
-                        Log(account.Label + ": process exited unexpectedly; waiting two minutes for the server session to clear before reconnecting.");
+                        Log(account.Label + ": process exited unexpectedly; waiting one minute for the server session to clear before reconnecting.");
                         continue;
                     }
                     if (DateTimeOffset.UtcNow < crash.NotBefore) continue;
@@ -1390,7 +1397,7 @@ public sealed partial class MainWindow : Window
         { connectionInspectionGate.Forget(process); return false; }
         var heartbeat = new ShutdownIpc(data).ReadSession(account, now);
         if (heartbeat != null && heartbeat.RegisteredUtc < process.StartedUtc.AddSeconds(-2)) heartbeat = null;
-        var traffic = ServerTraffic.Read(data, account, heartbeat, now);
+        var traffic = serverTrafficCache.Read(data, account, process, heartbeat, now);
         var recentTraffic = traffic?.IsRecent(now) == true;
         var inspectionDue = connectionInspectionGate.Observe(process, traffic, now);
         if (recentTraffic) { connectionStates.Remove(account.Id); nextConnectionInspection.Remove(process); }
@@ -1503,8 +1510,19 @@ public sealed partial class MainWindow : Window
             if (!alreadyExited) await WindowsProcessCleanup.TerminateAsync(process, configuration.PolPath, cancellation.Token);
             connectionStates.Remove(account.Id);
             disconnectRestarts.Add(account.Id);
-            nextRetry[account.Id] = DateTimeOffset.UtcNow.AddSeconds(15 + Random.Shared.Next(15));
-            Log(account.Label + (alreadyExited ? ": disconnected process exited. Fresh login queued." : hung ? ": not responding for 90 seconds; closed the tracked process. Restart queued." : ": another error prevented reconnection; closed the tracked process. Fresh login queued."));
+            var cleanupDelay = CharacterSessionBackoff.CleanupRestartDelay(hung);
+            if (cleanupDelay > TimeSpan.Zero)
+            {
+                var notBefore = DateTimeOffset.UtcNow + cleanupDelay;
+                crashRecoveryDelay[account.Id] = (process, notBefore);
+                nextRetry[account.Id] = notBefore;
+            }
+            else
+            {
+                crashRecoveryDelay.Remove(account.Id);
+                nextRetry.Remove(account.Id);
+            }
+            Log(account.Label + (alreadyExited ? ": disconnected process exited. Fresh login queued without a crash cooldown." : hung ? ": not responding for 90 seconds; closed the tracked process. Waiting one minute before reconnecting." : ": another error prevented reconnection; closed the tracked process. Fresh login queued without a crash cooldown."));
             return true;
         }
         catch (OperationCanceledException) { return false; }

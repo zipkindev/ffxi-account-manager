@@ -70,7 +70,36 @@ internal static class GameUpdateRegression
         check(CharacterSessionBackoff.RequiresCrashDelay(false,false),"unexpected exit requires server-session cooldown");
         check(!CharacterSessionBackoff.RequiresCrashDelay(true,false),"confirmed disconnect cleanup keeps its established restart path");
         check(!CharacterSessionBackoff.RequiresCrashDelay(false,true),"scheduled maintenance restart does not add a crash delay");
-        check(CharacterSessionBackoff.CrashRestartDelay==TimeSpan.FromMinutes(2),"crash cooldown uses the initial two-minute trial setting");
+        check(CharacterSessionBackoff.CrashRestartDelay==TimeSpan.FromMinutes(1),"unexpected exits wait one minute before the normal login sequence");
+        check(CharacterSessionBackoff.CleanupRestartDelay(false)==TimeSpan.Zero,"confirmed DC cleanup adds no artificial pre-login cooldown");
+        check(CharacterSessionBackoff.CleanupRestartDelay(true)==TimeSpan.FromMinutes(1),"force-closing a hung client keeps the one-minute server-session cooldown");
+        var trafficRoot=Path.Combine(Path.GetTempPath(),"ffxi-shared-traffic-"+Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(trafficRoot);
+        try {
+            var stamp=DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+            var a=new AccountConfiguration(Guid.NewGuid(),"Fixture","","Fixture","Odin","","");
+            var proc=new ManagedProcess(123,stamp.AddMinutes(-2).UtcDateTime);
+            var session=new GameSession("0123456789abcdef","Fixture","Odin",stamp.AddMinutes(-1),stamp);
+            var path=Path.Combine(trafficRoot,"odin_fixture.connection");
+            void Publish(GameSession s,DateTimeOffset time)=>File.WriteAllLines(path,[s.Nonce,s.Character,s.World,s.RegisteredUtc.ToUnixTimeSeconds().ToString(),time.ToUnixTimeSeconds().ToString(),time.ToUnixTimeSeconds().ToString()]);
+            var cache=new ServerTrafficCache();Publish(session,stamp);
+            var first=cache.Read(trafficRoot,a,proc,session,stamp);
+            check(first?.IsRecent(stamp)==true,"shared display/watchdog sample verifies matching session traffic");
+            File.Delete(path);
+            check(ReferenceEquals(first,cache.Read(trafficRoot,a,proc,session,stamp.AddSeconds(3))),"dashboard and watchdog reuse one report read within thirty seconds");
+            check(cache.Read(trafficRoot,a,proc,session,stamp.AddSeconds(30))==null,"shared sample is reread at the thirty-second boundary");
+            Publish(session,stamp.AddSeconds(31));
+            check(cache.Read(trafficRoot,a,proc,session,stamp.AddSeconds(31))==null,"missing samples do not trigger rapid per-render retries");
+            Publish(session,stamp.AddSeconds(60));
+            check(cache.Read(trafficRoot,a,proc,session,stamp.AddSeconds(60))?.IsRecent(stamp.AddSeconds(60))==true,"next normal sample recovers after a transient missing file");
+            check(cache.Read(trafficRoot,a,proc with {StartedUtc=stamp.AddSeconds(61).UtcDateTime},session,stamp.AddSeconds(61))==null,"a replacement process cannot inherit old character evidence");
+            var replacement=session with {Nonce="fedcba9876543210",RegisteredUtc=stamp.AddSeconds(62)};Publish(replacement,stamp.AddSeconds(62));
+            check(cache.Read(trafficRoot,a,proc,replacement,stamp.AddSeconds(62))?.IsRecent(stamp.AddSeconds(62))==true,"a new nonce immediately invalidates the previous session sample");
+            check(cache.Read(trafficRoot,a,proc,null,stamp.AddSeconds(63))==null,"missing fresh heartbeat cannot reuse a connected status");
+            check(cache.Read(trafficRoot,a,proc,replacement with {World="Asura"},stamp.AddSeconds(63))==null,"a different world cannot inherit connected evidence");
+            File.Delete(path);
+            check(cache.Read(trafficRoot,a,proc,replacement,stamp.AddSeconds(61))==null,"clock rollback cannot indefinitely reuse a cached connection");
+        } finally {Directory.Delete(trafficRoot,true);}
         var available=Frame("Version Update","A version update is necessary.","Update","Cancel");
         var start=GameUpdateWorkflow.Recognize(available);
         check(GameUpdateWorkflow.Recognize(Frame("Version Update","Update","Cancel")).Button=="Update","official updater heading and exact Update control work with partial body OCR");
