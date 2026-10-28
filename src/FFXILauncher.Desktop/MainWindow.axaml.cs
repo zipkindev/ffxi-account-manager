@@ -1254,6 +1254,8 @@ public sealed partial class MainWindow : Window
             if (ex.Message == "Could not validate user name or password. Please check.") intentionallyStopped.Add(account.Id);
             nextRetry[account.Id] = DateTimeOffset.UtcNow.AddMinutes(5);
             Log(account.Label + ": login needs attention: " + ex.Message);
+            if (ex.Message.StartsWith("POL-0008", StringComparison.Ordinal) && sessions.TryGetValue(account.Id, out var failed))
+                PauseExhaustedFriendRetries(account, failed);
         }
         finally { accountCancellation.Remove(account.Id); UpdateSelectionControls(); }
     }
@@ -1411,6 +1413,22 @@ public sealed partial class MainWindow : Window
         }
         finally { recoveryChecking = false; }
     }
+    private bool PauseExhaustedFriendRetries(AccountConfiguration account, ManagedProcess process)
+    {
+        string? reason = null;
+        try
+        {
+            if (new FriendListRetryStore(dataRoot).Attempts(account.Id, process) >= FriendListRecovery.MaximumRetries)
+                reason = FriendListRecovery.LimitMessage;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        { reason = "POL-0008: retry history could not be read; automatic recovery paused. POL remains open."; }
+        if (reason == null) return false;
+        connectionStates[account.Id] = reason;
+        nextConnectionInspection[process] = DateTimeOffset.MaxValue;
+        Log(account.Label + ": " + reason);
+        return true;
+    }
     private async Task<bool> RecoverRunningConnection(AccountConfiguration account, ManagedProcess process)
     {
         if (autoLogin is not WindowsAutoLogin windows || windows.SetupProblem(account) != null || AddonDataDirectory is not {} data) return false;
@@ -1425,7 +1443,16 @@ public sealed partial class MainWindow : Window
         var traffic = serverTrafficCache.Read(data, account, process, heartbeat, now);
         var recentTraffic = traffic?.IsRecent(now) == true;
         var inspectionDue = connectionInspectionGate.Observe(process, traffic, now);
-        if (recentTraffic) { connectionStates.Remove(account.Id); nextConnectionInspection.Remove(process); }
+        if (recentTraffic)
+        {
+            if (connectionStates.TryGetValue(account.Id, out var lastState) && lastState.StartsWith("POL-0008", StringComparison.Ordinal))
+            {
+                try { new FriendListRetryStore(dataRoot).Clear(account.Id, process); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { Log(account.Label + ": POL-0008 retry history needs review: " + ex.GetType().Name); }
+            }
+            connectionStates.Remove(account.Id); nextConnectionInspection.Remove(process);
+        }
+        if (nextConnectionInspection.TryGetValue(process, out var pausedInspection) && pausedInspection == DateTimeOffset.MaxValue) return false;
         if (health == SessionHealth.Unresponsive && heartbeat == null && !recentTraffic) unresponsiveSince.TryAdd(process, now);
         else unresponsiveSince.Remove(process);
         var hung = DisconnectRecovery.CanCloseHung(account, intentionallyStopped.Contains(account.Id), health,
@@ -1437,6 +1464,7 @@ public sealed partial class MainWindow : Window
         cancellation.CancelAfter(TimeSpan.FromMinutes(7));
         accountCancellation[account.Id] = cancellation;
         connectionChecks.Add(account.Id);
+        var friendListRecovery = false;
         UpdateSelectionControls();
         try
         {
@@ -1467,19 +1495,21 @@ public sealed partial class MainWindow : Window
                     await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: "external-exit");
                     return true;
                 }
+                friendListRecovery = code == "POL-0008";
+                if (friendListRecovery && PauseExhaustedFriendRetries(account, process)) return false;
                 var resumeMenu = code == null && windows.LastInspectionCheckpoint is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation;
-                if (!DisconnectRecovery.IsDisconnectCode(code) && code != "POL-0019" && !resumeMenu)
+                if (!DisconnectRecovery.IsDisconnectCode(code) && code is not ("POL-0019" or "POL-0008") && !resumeMenu)
                 {
                     nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(5);
                     Log(account.Label + ": no disconnect dialog found; the session was left running. Screen checks deferred while the same condition persists.");
                     return false;
                 }
                 var latest = configuration.ConfiguredAccounts.SingleOrDefault(a => a.Id == account.Id);
-                if (latest == null || !(code == "POL-0019" || resumeMenu
+                if (latest == null || !(code is "POL-0019" or "POL-0008" || resumeMenu
                         ? latest.MaintainConnection && latest.AutoLoginEnabled && !intentionallyStopped.Contains(account.Id) && !windows.LastInspectionCredentialRejected && windows.ReadinessProblem(latest) == null
                         : DisconnectRecovery.CanRestart(latest, intentionallyStopped.Contains(account.Id), windows.LastInspectionCredentialRejected, code)) ||
                     !sessions.TryGetValue(account.Id, out var tracked) || tracked != process) return false;
-                connectionStates[account.Id] = resumeMenu ? "Reconnecting from the saved game menu…" : "Disconnected (" + code + ") · reconnecting…";
+                connectionStates[account.Id] = friendListRecovery ? "POL-0008 · retrying the friend-list service…" : resumeMenu ? "Reconnecting from the saved game menu…" : "Disconnected (" + code + ") · reconnecting…";
                 // A fresh render heartbeat does not override two matching DC-error reads.
                 // Recent server packets do: never interrupt an active connection.
                 if (ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow)) return false;
@@ -1489,11 +1519,11 @@ public sealed partial class MainWindow : Window
                     Log(account.Label + ": disconnected (" + code + "). " + EvaluateRecovery(account).Reason);
                     return false;
                 }
-                if (code == "POL-0019" || resumeMenu)
+                if (code is "POL-0019" or "POL-0008" || resumeMenu)
                 {
-                    Log(account.Label + (resumeMenu ? ": resuming the verified cached game menu in the existing process." : ": POL version service is unavailable; retrying its explicit network dialog in the existing process."));
+                    Log(account.Label + (friendListRecovery ? ": friend-list service is unavailable (POL-0008); bounded Retry in the existing process." : resumeMenu ? ": resuming the verified cached game menu in the existing process." : ": POL version service is unavailable; retrying its explicit network dialog in the existing process."));
                     var fullLogin = await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: resumeMenu ? "continue" : "");
-                    if ((resumeMenu || fullLogin) && ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow))
+                    if ((resumeMenu || friendListRecovery || fullLogin) && ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow))
                     {
                         RecordRecoveredSession(account.Id, process);
                         connectionStates.Remove(account.Id);
@@ -1555,6 +1585,7 @@ public sealed partial class MainWindow : Window
         catch (OperationCanceledException) { return false; }
         catch (Exception ex)
         {
+            if (friendListRecovery && PauseExhaustedFriendRetries(account, process)) return false;
             nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(2);
             if (connectionStates.ContainsKey(account.Id)) connectionStates[account.Id] = "Disconnected · recovery paused: " + ex.Message;
             Log(account.Label + ": connection recovery paused. " + ex.Message);

@@ -1,0 +1,851 @@
+{
+  "Lines": [
+    {
+      "Text": "Friend List Communication Error",
+      "Words": [
+        {
+          "Y": 96,
+          "Height": 13,
+          "Width": 52.5,
+          "Text": "Friend",
+          "X": 82.5
+        },
+        {
+          "Y": 96,
+          "Height": 13,
+          "Width": 28.5,
+          "Text": "List",
+          "X": 144.5
+        },
+        {
+          "Y": 96,
+          "Height": 13,
+          "Width": 139.5,
+          "Text": "Communication",
+          "X": 182.5
+        },
+        {
+          "Y": 96,
+          "Height": 13,
+          "Width": 40,
+          "Text": "Error",
+          "X": 332
+        }
+      ]
+    },
+    {
+      "Text": "Error code:POL-0008",
+      "Words": [
+        {
+          "Y": 129.5,
+          "Height": 13.5,
+          "Width": 40,
+          "Text": "Error",
+          "X": 73
+        },
+        {
+          "Y": 129.5,
+          "Height": 13.5,
+          "Width": 135,
+          "Text": "code:POL-0008",
+          "X": 122.5
+        }
+      ]
+    },
+    {
+      "Text": "Network is busy or there are connection",
+      "Words": [
+        {
+          "Y": 151.5,
+          "Height": 13.5,
+          "Width": 71.5,
+          "Text": "Network",
+          "X": 88.5
+        },
+        {
+          "Y": 151.5,
+          "Height": 13.5,
+          "Width": 12,
+          "Text": "is",
+          "X": 169.5
+        },
+        {
+          "Y": 151.5,
+          "Height": 15.5,
+          "Width": 39.5,
+          "Text": "busy",
+          "X": 190.5
+        },
+        {
+          "Y": 154.5,
+          "Height": 10.5,
+          "Width": 17.5,
+          "Text": "or",
+          "X": 239.5
+        },
+        {
+          "Y": 151.5,
+          "Height": 13.5,
+          "Width": 47,
+          "Text": "there",
+          "X": 266.5
+        },
+        {
+          "Y": 154.5,
+          "Height": 10.5,
+          "Width": 28,
+          "Text": "are",
+          "X": 322.5
+        },
+        {
+          "Y": 151.5,
+          "Height": 13.5,
+          "Width": 99.5,
+          "Text": "connection",
+          "X": 359.5
+        }
+      ]
+    },
+    {
+      "Text": "problems. Please try again later or",
+      "Words": [
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 85.5,
+          "Text": "problems.",
+          "X": 88.5
+        },
+        {
+          "Y": 171.5,
+          "Height": 13.5,
+          "Width": 56,
+          "Text": "Please",
+          "X": 183.5
+        },
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 23.5,
+          "Text": "try",
+          "X": 248.5
+        },
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 46.5,
+          "Text": "again",
+          "X": 281.5
+        },
+        {
+          "Y": 171.5,
+          "Height": 13.5,
+          "Width": 41.5,
+          "Text": "later",
+          "X": 337.5
+        },
+        {
+          "Y": 174.5,
+          "Height": 10.5,
+          "Width": 17.5,
+          "Text": "or",
+          "X": 388.5
+        }
+      ]
+    },
+    {
+      "Text": "verify that cables, networking devices,",
+      "Words": [
+        {
+          "Y": 191.5,
+          "Height": 15.5,
+          "Width": 50.5,
+          "Text": "verify",
+          "X": 88.5
+        },
+        {
+          "Y": 192,
+          "Height": 13,
+          "Width": 36.5,
+          "Text": "that",
+          "X": 148.5
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 63,
+          "Text": "cables,",
+          "X": 194.5
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 94.5,
+          "Text": "networking",
+          "X": 267.5
+        },
+        {
+          "Y": 191.5,
+          "Height": 15.5,
+          "Width": 73,
+          "Text": "devices,",
+          "X": 371.5
+        }
+      ]
+    },
+    {
+      "Text": "and network settings are properly",
+      "Words": [
+        {
+          "Y": 211.5,
+          "Height": 13.5,
+          "Width": 31.5,
+          "Text": "and",
+          "X": 88.5
+        },
+        {
+          "Y": 212,
+          "Height": 13,
+          "Width": 70,
+          "Text": "network",
+          "X": 129
+        },
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 68,
+          "Text": "settings",
+          "X": 207.5
+        },
+        {
+          "Y": 214.5,
+          "Height": 10.5,
+          "Width": 28,
+          "Text": "are",
+          "X": 284.5
+        },
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 74.5,
+          "Text": "properly",
+          "X": 321.5
+        }
+      ]
+    },
+    {
+      "Text": "configured.",
+      "Words": [
+        {
+          "Y": 231.5,
+          "Height": 15.5,
+          "Width": 100.5,
+          "Text": "configured.",
+          "X": 88.5
+        }
+      ]
+    },
+    {
+      "Text": "Retry",
+      "Words": [
+        {
+          "Y": 392,
+          "Height": 12.5,
+          "Width": 39,
+          "Text": "Retry",
+          "X": 391.5
+        }
+      ]
+    },
+    {
+      "Text": "A",
+      "Words": [
+        {
+          "Y": 124,
+          "Height": 10,
+          "Width": 11.5,
+          "Text": "A",
+          "X": 562
+        }
+      ]
+    },
+    {
+      "Text": "Exit",
+      "Words": [
+        {
+          "Y": 392,
+          "Height": 11,
+          "Width": 27,
+          "Text": "Exit",
+          "X": 526
+        }
+      ]
+    },
+    {
+      "Text": "Network Connection Information",
+      "Words": [
+        {
+          "Y": 392,
+          "Height": 11,
+          "Width": 62,
+          "Text": "Network",
+          "X": 60
+        },
+        {
+          "Y": 392,
+          "Height": 11,
+          "Width": 91,
+          "Text": "Connection",
+          "X": 131
+        },
+        {
+          "Y": 392,
+          "Height": 11,
+          "Width": 90,
+          "Text": "Information",
+          "X": 231
+        }
+      ]
+    },
+    {
+      "Text": "0 2001 SQUARE CO., LTD. All Rights Reserved.",
+      "Words": [
+        {
+          "Y": 446,
+          "Height": 11,
+          "Width": 10.5,
+          "Text": "0",
+          "X": 22.5
+        },
+        {
+          "Y": 447,
+          "Height": 8,
+          "Width": 21,
+          "Text": "2001",
+          "X": 36.5
+        },
+        {
+          "Y": 447,
+          "Height": 8,
+          "Width": 39,
+          "Text": "SQUARE",
+          "X": 63
+        },
+        {
+          "Y": 447.5,
+          "Height": 9,
+          "Width": 22,
+          "Text": "CO.,",
+          "X": 106.5
+        },
+        {
+          "Y": 447.5,
+          "Height": 7.5,
+          "Width": 18,
+          "Text": "LTD.",
+          "X": 133
+        },
+        {
+          "Y": 447.5,
+          "Height": 7.5,
+          "Width": 12,
+          "Text": "All",
+          "X": 155.5
+        },
+        {
+          "Y": 447.5,
+          "Height": 9.5,
+          "Width": 29,
+          "Text": "Rights",
+          "X": 172
+        },
+        {
+          "Y": 447,
+          "Height": 8,
+          "Width": 49,
+          "Text": "Reserved.",
+          "X": 205
+        }
+      ]
+    },
+    {
+      "Text": "Immunication Error",
+      "Words": [
+        {
+          "Y": 97,
+          "Height": 12,
+          "Width": 117,
+          "Text": "Immunication",
+          "X": 205
+        },
+        {
+          "Y": 96,
+          "Height": 13,
+          "Width": 40,
+          "Text": "Error",
+          "X": 332
+        }
+      ]
+    },
+    {
+      "Text": "-0008",
+      "Words": [
+        {
+          "Y": 130,
+          "Height": 13,
+          "Width": 52,
+          "Text": "-0008",
+          "X": 206
+        }
+      ]
+    },
+    {
+      "Text": "or there are connection",
+      "Words": [
+        {
+          "Y": 155,
+          "Height": 10,
+          "Width": 17,
+          "Text": "or",
+          "X": 240
+        },
+        {
+          "Y": 152,
+          "Height": 13,
+          "Width": 47,
+          "Text": "there",
+          "X": 267
+        },
+        {
+          "Y": 155,
+          "Height": 10,
+          "Width": 28,
+          "Text": "are",
+          "X": 323
+        },
+        {
+          "Y": 152,
+          "Height": 13,
+          "Width": 99,
+          "Text": "connection",
+          "X": 360
+        }
+      ]
+    },
+    {
+      "Text": "*ase try again Later or",
+      "Words": [
+        {
+          "Y": 175,
+          "Height": 10,
+          "Width": 35,
+          "Text": "*ase",
+          "X": 205
+        },
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 23,
+          "Text": "try",
+          "X": 249
+        },
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 46,
+          "Text": "again",
+          "X": 282
+        },
+        {
+          "Y": 172,
+          "Height": 13,
+          "Width": 41,
+          "Text": "Later",
+          "X": 338
+        },
+        {
+          "Y": 175,
+          "Height": 10,
+          "Width": 17,
+          "Text": "or",
+          "X": 389
+        }
+      ]
+    },
+    {
+      "Text": "ables, networking devices,",
+      "Words": [
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 52,
+          "Text": "ables,",
+          "X": 206
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 94,
+          "Text": "networking",
+          "X": 268
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 73,
+          "Text": "devices,",
+          "X": 372
+        }
+      ]
+    },
+    {
+      "Text": "settings are properly",
+      "Words": [
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 68,
+          "Text": "settings",
+          "X": 208
+        },
+        {
+          "Y": 215,
+          "Height": 10,
+          "Width": 28,
+          "Text": "are",
+          "X": 285
+        },
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 74,
+          "Text": "properly",
+          "X": 322
+        }
+      ]
+    },
+    {
+      "Text": "-ODD'",
+      "Words": [
+        {
+          "Y": 130,
+          "Height": 13,
+          "Width": 52,
+          "Text": "-ODD'",
+          "X": 206
+        }
+      ]
+    },
+    {
+      "Text": "or there are connectlon",
+      "Words": [
+        {
+          "Y": 155,
+          "Height": 11,
+          "Width": 18,
+          "Text": "or",
+          "X": 239
+        },
+        {
+          "Y": 152,
+          "Height": 14,
+          "Width": 47,
+          "Text": "there",
+          "X": 267
+        },
+        {
+          "Y": 155,
+          "Height": 11,
+          "Width": 28,
+          "Text": "are",
+          "X": 323
+        },
+        {
+          "Y": 152,
+          "Height": 14,
+          "Width": 99,
+          "Text": "connectlon",
+          "X": 360
+        }
+      ]
+    },
+    {
+      "Text": "try agaln later or",
+      "Words": [
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 24,
+          "Text": "try",
+          "X": 249
+        },
+        {
+          "Y": 172,
+          "Height": 15,
+          "Width": 46,
+          "Text": "agaln",
+          "X": 282
+        },
+        {
+          "Y": 172,
+          "Height": 14,
+          "Width": 41,
+          "Text": "later",
+          "X": 338
+        },
+        {
+          "Y": 175,
+          "Height": 11,
+          "Width": 18,
+          "Text": "or",
+          "X": 388
+        }
+      ]
+    },
+    {
+      "Text": "able'. netwrkln\u2022 devlce\u2022.",
+      "Words": [
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 52,
+          "Text": "able'.",
+          "X": 206
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 95,
+          "Text": "netwrkln\u2022",
+          "X": 267
+        },
+        {
+          "Y": 192,
+          "Height": 15,
+          "Width": 73,
+          "Text": "devlce\u2022.",
+          "X": 372
+        }
+      ]
+    },
+    {
+      "Text": "\"ttln\u2022\u2022 are properly",
+      "Words": [
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 69,
+          "Text": "\"ttln\u2022\u2022",
+          "X": 207
+        },
+        {
+          "Y": 215,
+          "Height": 11,
+          "Width": 28,
+          "Text": "are",
+          "X": 285
+        },
+        {
+          "Y": 212,
+          "Height": 15,
+          "Width": 76,
+          "Text": "properly",
+          "X": 321
+        }
+      ]
+    },
+    {
+      "Text": "mmunication Error",
+      "Words": [
+        {
+          "Y": 96,
+          "Height": 12.666666666666666,
+          "Width": 116.66666666666667,
+          "Text": "mmunication",
+          "X": 205
+        },
+        {
+          "Y": 96,
+          "Height": 12.666666666666666,
+          "Width": 39.666666666666664,
+          "Text": "Error",
+          "X": 332
+        }
+      ]
+    },
+    {
+      "Text": "JSY or there are connection",
+      "Words": [
+        {
+          "Y": 153.66666666666669,
+          "Height": 13.333333333333334,
+          "Width": 25,
+          "Text": "JSY",
+          "X": 205
+        },
+        {
+          "Y": 154.66666666666669,
+          "Height": 10.333333333333334,
+          "Width": 17.666666666666668,
+          "Text": "or",
+          "X": 239.33333333333334
+        },
+        {
+          "Y": 151.66666666666669,
+          "Height": 13.333333333333334,
+          "Width": 47.333333333333336,
+          "Text": "there",
+          "X": 266.3333333333333
+        },
+        {
+          "Y": 154.66666666666669,
+          "Height": 10.333333333333334,
+          "Width": 28.333333333333332,
+          "Text": "are",
+          "X": 322.3333333333333
+        },
+        {
+          "Y": 151.66666666666669,
+          "Height": 13.333333333333334,
+          "Width": 99.33333333333333,
+          "Text": "connection",
+          "X": 359.66666666666663
+        }
+      ]
+    },
+    {
+      "Text": "ny or there are wnnectlon",
+      "Words": [
+        {
+          "Y": 153,
+          "Height": 14.333333333333334,
+          "Width": 26,
+          "Text": "ny",
+          "X": 205
+        },
+        {
+          "Y": 154,
+          "Height": 11.333333333333334,
+          "Width": 19,
+          "Text": "or",
+          "X": 239
+        },
+        {
+          "Y": 151,
+          "Height": 15,
+          "Width": 48.333333333333336,
+          "Text": "there",
+          "X": 266
+        },
+        {
+          "Y": 154,
+          "Height": 11.333333333333334,
+          "Width": 29.333333333333332,
+          "Text": "are",
+          "X": 322
+        },
+        {
+          "Y": 151,
+          "Height": 15,
+          "Width": 101,
+          "Text": "wnnectlon",
+          "X": 359
+        }
+      ]
+    },
+    {
+      "Text": "\u2022ase try agaln Lat* or",
+      "Words": [
+        {
+          "Y": 174,
+          "Height": 11.333333333333334,
+          "Width": 35.333333333333336,
+          "Text": "\u2022ase",
+          "X": 205
+        },
+        {
+          "Y": 171,
+          "Height": 16.333333333333332,
+          "Width": 25,
+          "Text": "try",
+          "X": 248
+        },
+        {
+          "Y": 171,
+          "Height": 16.333333333333332,
+          "Width": 48,
+          "Text": "agaln",
+          "X": 281
+        },
+        {
+          "Y": 171,
+          "Height": 15,
+          "Width": 43,
+          "Text": "Lat*",
+          "X": 337
+        },
+        {
+          "Y": 174,
+          "Height": 11.333333333333334,
+          "Width": 19,
+          "Text": "or",
+          "X": 388
+        }
+      ]
+    },
+    {
+      "Text": "able, networklng devlces,",
+      "Words": [
+        {
+          "Y": 191,
+          "Height": 17,
+          "Width": 53.333333333333336,
+          "Text": "able,",
+          "X": 205
+        },
+        {
+          "Y": 191,
+          "Height": 16.333333333333332,
+          "Width": 95.66666666666667,
+          "Text": "networklng",
+          "X": 266.6666666666667
+        },
+        {
+          "Y": 191,
+          "Height": 17,
+          "Width": 74.33333333333333,
+          "Text": "devlces,",
+          "X": 371
+        }
+      ]
+    },
+    {
+      "Text": "wttlngs are ProP*LY",
+      "Words": [
+        {
+          "Y": 211,
+          "Height": 16.333333333333332,
+          "Width": 69.33333333333333,
+          "Text": "wttlngs",
+          "X": 207
+        },
+        {
+          "Y": 214,
+          "Height": 11.333333333333334,
+          "Width": 29.333333333333332,
+          "Text": "are",
+          "X": 284
+        },
+        {
+          "Y": 211,
+          "Height": 17,
+          "Width": 76.33333333333333,
+          "Text": "ProP*LY",
+          "X": 320.6666666666667
+        }
+      ]
+    }
+  ],
+  "Width": 640,
+  "Height": 480
+}

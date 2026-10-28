@@ -8,6 +8,7 @@ void Check(bool condition, string label)
     Console.WriteLine("PASS: " + label);
 }
 GameUpdateRegression.Run(Check);
+FriendListRecoveryRegression.Run(Check);
 var trainingDirectory = Path.Combine(Path.GetTempPath(), "ffxi-training-" + Guid.NewGuid());
 try
 {

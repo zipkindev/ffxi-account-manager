@@ -421,6 +421,8 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
         GameSession? worldObservation = null;
         var sessionBackoff = new CharacterSessionBackoff();
         var networkBackoff = new NetworkRetryBackoff();
+        var friendRetries = new FriendListRetryStore(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher"));
+        var friendListRetrySeen = false;
         bool CanReplaySuccessfulDefault() => trainingSection == "" && identityVerified && passwordEntered &&
             titleEnteredAt != DateTimeOffset.MinValue && replayPath != null && confirmations.HasReplay;
         void ReplaySuccessfulDefault()
@@ -489,6 +491,9 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                                 { await Task.Delay(200, cancellation); continue; }
                             }
                             worldVerified = true;
+                            try { friendRetries.Clear(account.Id, process); }
+                            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                            { report("Character online; POL-0008 retry history could not be cleared. Review local diagnostics before another recovery."); }
                             selectedCharacterVerified = true; characterConfirmed = true;
                             if (FullFlowValidated)
                             {
@@ -687,6 +692,29 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     gameHandoffFocused = true;
                     frame = await ReadFrame(cancellation);
                 }
+                if (!memberSectionOnly && (trainingSection is "" or "continue") && FriendListRecovery.IsDialog(frame))
+                {
+                    friendListRetrySeen = true;
+                    TimeSpan delay;
+                    try { delay = await FriendListRecovery.RetryAsync(frame, token => ReadFrame(token), Task.Delay,
+                        (retryFrame, token) =>
+                        {
+                            token.ThrowIfCancellationRequested();
+                            var retryDpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
+                            try { Click(retryFrame, "Retry"); LogPolPathEvent("FriendListRetryClick", LoginCheckpoint.Error); }
+                            finally { if (retryDpi != IntPtr.Zero) WindowsLoginWindow.SetThreadDpiAwarenessContext(retryDpi); }
+                            return Task.CompletedTask;
+                        }, () => friendRetries.ReserveRetry(account.Id, process),
+                        waitTime => report($"POL friend-list service is unavailable (POL-0008). Waiting {(int)waitTime.TotalSeconds} seconds before Retry {friendRetries.Attempts(account.Id, process)}/3…"), cancellation); }
+                    catch (FriendListRecoveryException ex) { throw new LoginSafetyException(ex.Message); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+                    { throw new LoginSafetyException("POL-0008: retry history could not be saved or read. No Retry click was sent; POL remains open."); }
+                    deadline += delay;
+                    openingGameUntil = null;
+                    previous = LoginCheckpoint.Unknown;
+                    stageSince = unknownSince = loadingPollUntil = DateTimeOffset.UtcNow;
+                    continue;
+                }
                 if (!memberSectionOnly && trainingSection == "" && LoginCheckpoints.NetworkDialogCode(frame) == "POL-0019")
                 {
                     if (passwordEntered || submitted) throw new LoginSafetyException("POL returned to version communication after authentication. Credentials will not be resubmitted; the process remains open.");
@@ -722,6 +750,8 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                     continue;
                 }
                 var stage = LoginCheckpoints.Recognize(frame);
+                if (friendListRetrySeen && FriendListRecovery.IsCredentialScreen(stage))
+                    throw new LoginSafetyException("POL-0008: POL returned to a credential screen after Retry. No credentials will be entered; POL remains open.");
                 if (trainingSection == "character" && stage == LoginCheckpoint.Unknown &&
                     LoginCheckpoints.ConfirmationCancelPoint(frame, account.Character) != null)
                     stage = LoginCheckpoint.CharacterConfirmation;

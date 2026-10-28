@@ -286,6 +286,7 @@ public static class LoginCheckpoints
         "FFXI-4001" when frame.Has("server") && frame.Has("timed out") && frame.Has("shut down") => "FFXI-4001",
         "FFXI-4002" when frame.Has("Time out") && frame.Has("server") && frame.Has("shut down") => "FFXI-4002",
         "FFXI-3100" when frame.Has("connect to lobby server") => "FFXI-3100",
+        "POL-0008" when frame.Has("Friend List Communication Error") && frame.Has("Network is busy") && frame.Has("connection problems") && frame.Has("network settings") => "POL-0008",
         "POL-0019" when frame.Has("Version Update Communication Error") && frame.Has("Cannot connect to server") && frame.Has("network settings") => "POL-0019",
         _ => null
     };

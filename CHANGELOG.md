@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.36
+
+- Recover confirmed POL-0008 Friend List Communication Error dialogs by clicking their unique bounded Retry button after 30, 60 and 120 seconds, then continuing through the recognized login menus in the same process. Require two matching reads before and after each wait; do not resubmit credentials if POL returns to a login screen.
+- Persist the three-attempt budget per account and exact process across helper/manager restarts. At the limit, leave POL open with manual Retry/restart guidance and pause further automatic inspection of that process. A new process or verified recovery clears the applicable budget; other accounts retain independent budgets and settings.
+- Keep the existing heartbeat/OCR cadence, force-close rules, other-terminal handling and reviewed normal login validations.
+
 ## 1.0.35
 
 - Show the actual POL process start date/time and a live session elapsed counter on each tracked account card. Reset elapsed only after successful automatic recovery, and show the last recovered date/time in local time.

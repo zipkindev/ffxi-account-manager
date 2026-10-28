@@ -816,6 +816,18 @@ if (OperatingSystem.IsWindows())
             string LiveStatus() => lateWindow.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionStatus_" + lateAccount.Id.ToString("N")).Text!;
             if (!LiveStatus().Contains("Connected") || LiveStatus().Contains("unverified")) throw new Exception("Matching fresh character and server reports must show Connected, including when Maintain connection is off.");
             var hints = (Dictionary<Guid, string>)typeof(MainWindow).GetField("connectionStates", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(lateWindow)!;
+            var retryBudget = new FriendListRetryStore(lateDirectory);
+            for (var attempt = 0; attempt < 3; attempt++) retryBudget.ReserveRetry(lateAccount.Id, uniqueGame.Process);
+            var pauseFriend = typeof(MainWindow).GetMethod("PauseExhaustedFriendRetries", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            if (!(bool)pauseFriend.Invoke(lateWindow, [lateAccount, uniqueGame.Process])!) throw new Exception("Exhausted friend-list retries must pause this exact process.");
+            refresh.Invoke(lateWindow, null);
+            var inspections = (Dictionary<ManagedProcess, DateTimeOffset>)typeof(MainWindow).GetField("nextConnectionInspection", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(lateWindow)!;
+            if (LiveStatus() != $"PID {uniqueGame.Process.Pid} · {FriendListRecovery.LimitMessage}" || inspections[uniqueGame.Process] != DateTimeOffset.MaxValue)
+                throw new Exception("Exhaustion must show manual Retry guidance and suppress repeated automatic inspections.");
+            if ((bool)pauseFriend.Invoke(lateWindow, [lateAccount, uniqueGame.Process with { StartedUtc = uniqueGame.Process.StartedUtc.AddSeconds(1) }])!)
+                throw new Exception("A replacement process must not inherit the exhausted friend-list pause.");
+            retryBudget.Clear(lateAccount.Id, uniqueGame.Process); inspections.Remove(uniqueGame.Process); hints.Clear();
+            Console.WriteLine("PASS: POL-0008 exhaustion displays manual Retry guidance and pauses only the exact process without closing it or changing account policy.");
             hints[lateAccount.Id] = "Disconnected (FFXI-4001) · reconnecting…";
             refresh.Invoke(lateWindow, null);
             if (!LiveStatus().Contains("Disconnected")) throw new Exception("A confirmed disconnect must take precedence over a still-rendering heartbeat.");
