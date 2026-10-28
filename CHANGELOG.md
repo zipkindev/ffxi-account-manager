@@ -1,5 +1,11 @@
 # Release notes
 
+## 1.0.35
+
+- Show the actual POL process start date/time and a live session elapsed counter on each tracked account card. Reset elapsed only after successful automatic recovery, and show the last recovered date/time in local time.
+- Preserve recovery timestamps for managed sessions across manager restarts. Existing sessions without recorded recovery history show no invented date. Stopped processes retain their timestamps without a running counter.
+- Reuse the existing dashboard refresh; no additional OCR, heartbeat polling or game input is needed. Login steps and the login-flow fingerprint are unchanged.
+
 ## 1.0.34
 
 - Show Connected with the character/world when fresh session-bound character and server reports verify the tracked process, replacing the unconditional login-unverified label. Share connection-report reads with recovery at the existing 30-second cadence.

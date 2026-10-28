@@ -51,6 +51,8 @@ public sealed partial class MainWindow : Window
     private LauncherConfiguration configuration = new();
     private readonly Dictionary<Guid, ManagedProcess> sessions = [];
     private readonly Dictionary<Guid, TextBlock> statuses = [];
+    private readonly Dictionary<Guid, TextBlock> sessionTimings = [];
+    private readonly Dictionary<Guid, DateTimeOffset> lastRecovered = [];
     private readonly Dictionary<Guid, TextBlock> characterMaintenance = [];
     private readonly Dictionary<Guid, TextBlock> characterStates = [];
     private readonly Dictionary<Guid, StackPanel> characterWeather = [];
@@ -180,11 +182,21 @@ public sealed partial class MainWindow : Window
     private void RememberSession(Guid id, ManagedProcess process)
     {
         sessions[id] = process;
+        SaveManagedSessions();
+    }
+    private void RecordRecoveredSession(Guid id, ManagedProcess process)
+    {
+        if (!sessions.TryGetValue(id, out var current) || current != process || platform.Inspect(process) == SessionHealth.Exited) return;
+        lastRecovered[id] = DateTimeOffset.UtcNow;
+        SaveManagedSessions();
+    }
+    private void SaveManagedSessions()
+    {
         if (string.IsNullOrWhiteSpace(configuration.PolPath)) return;
         try
         {
             new ManagedSessionStore(dataRoot).Save(sessions.Where(s => configuration.ConfiguredAccounts.Any(a => a.Id == s.Key) && platform.Inspect(s.Value) != SessionHealth.Exited)
-                .Select(s => new ManagedSession(s.Key, s.Value, Path.GetFullPath(configuration.PolPath))));
+                .Select(s => new ManagedSession(s.Key, s.Value, Path.GetFullPath(configuration.PolPath), lastRecovered.TryGetValue(s.Key, out var recovered) ? recovered : null)));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException or ArgumentException)
         { Log("Session is tracked, but restart recovery could not be saved: " + ex.Message); }
@@ -202,6 +214,7 @@ public sealed partial class MainWindow : Window
                 var live = running.SingleOrDefault(p => saved.Matches(p.Process, p.ExecutablePath));
                 if (live == null || live.Character != null && !live.Character.Equals(account.Character, StringComparison.OrdinalIgnoreCase)) continue;
                 sessions[account.Id] = saved.Process;
+                if (saved.LastRecoveredUtc is {} recovered) lastRecovered[account.Id] = recovered;
                 Log(account.Label + ": restored managed POL session after app restart (PID " + saved.Process.Pid + ").");
             }
         }
@@ -433,6 +446,7 @@ public sealed partial class MainWindow : Window
     {
         AccountList.Children.Clear();
         statuses.Clear();
+        sessionTimings.Clear();
         characterMaintenance.Clear();
         characterStates.Clear();
         characterWeather.Clear();
@@ -546,6 +560,10 @@ public sealed partial class MainWindow : Window
             var status = new TextBlock { Name = "SessionStatus_" + account.Id.ToString("N"), Text = account.RecoveryPauseReason ?? "No process tracked", TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Accent") };
             statuses[account.Id] = status;
             body.Children.Add(status);
+            var timing = new TextBlock { Name = "SessionTiming_" + account.Id.ToString("N"), TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Muted"), IsVisible = false };
+            ToolTip.SetTip(timing, "Local time. Session elapsed starts at POL launch and resets after successful automatic recovery. Last recovered is saved across manager restarts. No earlier recovery history is inferred.");
+            sessionTimings[account.Id] = timing;
+            body.Children.Add(timing);
             var state = new TextBlock { Name = "CharacterState_" + account.Id.ToString("N"), TextWrapping = TextWrapping.Wrap, Foreground = ThemeCatalog.BrushFor("Muted") };
             characterStates[account.Id] = state;
             body.Children.Add(state);
@@ -1050,8 +1068,14 @@ public sealed partial class MainWindow : Window
         CancelShutdownsButton.IsEnabled = shutdownStops.Count > 0;
         foreach (var (id, process) in sessions.ToArray())
         {
-            if (!statuses.TryGetValue(id, out var status) || pending.Contains(id) || accountCancellation.ContainsKey(id)) continue;
             var health = platform.Inspect(process);
+            if (sessionTimings.TryGetValue(id, out var timing))
+            {
+                timing.IsVisible = true;
+                timing.Text = new ManagedSession(id, process, configuration.PolPath, lastRecovered.TryGetValue(id, out var recovered) ? recovered : null)
+                    .DescribeTiming(DateTimeOffset.UtcNow, health != SessionHealth.Exited);
+            }
+            if (!statuses.TryGetValue(id, out var status) || pending.Contains(id) || accountCancellation.ContainsKey(id)) continue;
             var paused = configuration.ConfiguredAccounts.Single(a => a.Id == id);
             if (!paused.MaintainConnection && paused.RecoveryPauseReason is {} reason) { status.Text = reason; continue; }
             if (health != SessionHealth.Exited && connectionStates.TryGetValue(id, out var connectionState))
@@ -1191,7 +1215,7 @@ public sealed partial class MainWindow : Window
         buttons.Children.Add(cancel); buttons.Children.Add(launch); content.Children.Add(buttons); dialog.Content = content;
         return await dialog.ShowDialog<bool>(this);
     }
-    private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false, bool validateRecovery = false)
+    private async Task RunAutoLogin(AccountConfiguration account, bool userInitiated = false, bool validateRecovery = false, bool recovering = false)
     {
         if (userInitiated && account.RecoveryPauseReason != null && !await ConfirmExternalSessionLaunch(account)) return;
         var decision = EvaluateRecovery(account with { MaintainConnection = true }, userInitiated);
@@ -1221,6 +1245,7 @@ public sealed partial class MainWindow : Window
                 else Log(account.Label + ": existing login verified; complete startup validation still required for unattended recovery.");
             }
             else await autoLogin.LoginAsync(account, process, vault, cancellation.Token);
+            if (recovering) RecordRecoveredSession(account.Id, process);
             Log(account.Label + ": character login verified.");
         }
         catch (OperationCanceledException) { Log(account.Label + ": automatic login cancelled."); }
@@ -1380,7 +1405,7 @@ public sealed partial class MainWindow : Window
                 }
                 if (nextRetry.TryGetValue(id, out var retry) && DateTimeOffset.UtcNow < retry) continue;
                 nextRetry[id] = DateTimeOffset.UtcNow.AddSeconds(15 + Random.Shared.Next(15));
-                await RunAutoLogin(account, validateRecovery: validateRecovery);
+                await RunAutoLogin(account, validateRecovery: validateRecovery, recovering: true);
                 break;
             }
         }
@@ -1470,6 +1495,7 @@ public sealed partial class MainWindow : Window
                     var fullLogin = await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: resumeMenu ? "continue" : "");
                     if ((resumeMenu || fullLogin) && ServerTraffic.IsRecent(data, account, new ShutdownIpc(data).ReadSession(account, DateTimeOffset.UtcNow), DateTimeOffset.UtcNow))
                     {
+                        RecordRecoveredSession(account.Id, process);
                         connectionStates.Remove(account.Id);
                         Log(account.Label + (resumeMenu ? ": character and fresh server traffic verified after resuming the cached menu." : ": full login and fresh server traffic verified after the network retry."));
                         return true;
@@ -1487,6 +1513,7 @@ public sealed partial class MainWindow : Window
                 }
                 if (windows.LastConnectionRecovered)
                 {
+                    RecordRecoveredSession(account.Id, process);
                     connectionStates.Remove(account.Id);
                     Log(account.Label + ": connection restored; character and world verified online.");
                     return true;
@@ -1592,7 +1619,7 @@ public sealed partial class MainWindow : Window
                 var account = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == id);
                 if (account == null || !account.AutoLoginEnabled || !account.MaintainConnection || !EvaluateRecovery(account).Allowed) continue;
                 maintenanceRestarts.Remove(id);
-                await RunAutoLogin(account);
+                await RunAutoLogin(account, recovering: true);
                 if (uncertain.Count > 0) return;
             }
         }

@@ -762,7 +762,7 @@ if (OperatingSystem.IsWindows())
         var fakeWindower = Path.Combine(fakeRoot, "Windower.exe");
         File.WriteAllBytes(fakeWindower, []);
         var lateAccount = new AccountConfiguration(Guid.NewGuid(), "Late fixture", "", uniqueGame.Character!, "Odin", "", "");
-        new ConfigurationStore(lateDirectory).Save(new LauncherConfiguration(WindowerPath: fakeWindower, Accounts: [lateAccount]));
+        new ConfigurationStore(lateDirectory).Save(new LauncherConfiguration(WindowerPath: fakeWindower, PolPath: uniqueGame.ExecutablePath, Accounts: [lateAccount]));
         var lateWindow = new MainWindow(lateDirectory, false);
         try
         {
@@ -782,6 +782,31 @@ if (OperatingSystem.IsWindows())
             File.WriteAllLines(correct, ["1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString()]);
             adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
             if (!HasPid()) throw new Exception("Fresh heartbeat appearing after startup must attach existing configured account.");
+            var timingLabel = lateWindow.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionTiming_" + lateAccount.Id.ToString("N"));
+            if (!timingLabel.IsVisible || !timingLabel.Text!.Contains("POL started:") || !timingLabel.Text.Contains("Session elapsed:") || !timingLabel.Text.Contains("Last recovered: —"))
+                throw new Exception("Adopted POL must show actual process start and elapsed without invented recovery history.");
+            var recordRecovery = typeof(MainWindow).GetMethod("RecordRecoveredSession", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+            recordRecovery.Invoke(lateWindow, [lateAccount.Id, uniqueGame.Process with { StartedUtc = uniqueGame.Process.StartedUtc.AddSeconds(1) }]);
+            refresh.Invoke(lateWindow, null);
+            if (!timingLabel.Text!.Contains("Last recovered: —")) throw new Exception("Replacement process identity cannot reset the tracked session timer.");
+            recordRecovery.Invoke(lateWindow, [lateAccount.Id, uniqueGame.Process]);
+            refresh.Invoke(lateWindow, null);
+            if (timingLabel.Text!.Contains("Last recovered: —") || !timingLabel.Text.Contains("Session elapsed: 00:00:"))
+                throw new Exception("Successful recovery resets only the matching account's elapsed timer.");
+            var savedTiming = new ManagedSessionStore(lateDirectory).Load().Single();
+            if (savedTiming.LastRecoveredUtc == null || savedTiming.Process != uniqueGame.Process)
+                throw new Exception("Successful recovery must save its timestamp with the exact managed process.");
+            var reopened = new MainWindow(lateDirectory, false);
+            try
+            {
+                typeof(MainWindow).GetMethod("RestoreManagedSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(reopened, null);
+                refresh.Invoke(reopened, null);
+                var restoredTiming = reopened.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionTiming_" + lateAccount.Id.ToString("N"));
+                if (!restoredTiming.IsVisible || restoredTiming.Text!.Contains("Last recovered: —") || !restoredTiming.Text.Contains(savedTiming.LastRecoveredUtc.Value.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt")))
+                    throw new Exception("Manager restart must restore the recorded successful recovery timestamp.");
+            }
+            finally { reopened.Close(); }
+            Console.WriteLine("PASS: per-account POL start/elapsed/recovery display resets only for exact process identity using isolated manager state; no game input.");
             var state = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".state");
             var connection = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".connection");
             var header = new[] { "1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString() };

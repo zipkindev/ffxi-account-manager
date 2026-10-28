@@ -66,6 +66,19 @@ try
     try { sessionStore.Save([managed, managed with { AccountId = Guid.NewGuid() }]); throw new Exception("duplicate process ownership accepted"); }
     catch (InvalidDataException) { passed++; }
     Check(sessionStore.Load().Single() == managed, "invalid ownership update preserves the previous session mapping");
+    var startUtc = new DateTime(2026, 10, 28, 12, 0, 0, DateTimeKind.Utc);
+    var timing = managed with { Process = managed.Process with { StartedUtc = startUtc } };
+    Check(timing.DescribeTiming(startUtc.AddDays(1).AddSeconds(5), true).Contains("Session elapsed: 1d 00:00:05"), "session elapsed uses full days since original process start");
+    var recoveryUtc = new DateTimeOffset(startUtc.AddHours(1));
+    var recoveredTiming = timing with { LastRecoveredUtc = recoveryUtc };
+    Check(recoveredTiming.DescribeTiming(recoveryUtc.AddSeconds(12), true).Contains("Session elapsed: 00:00:12") && recoveredTiming.Process.StartedUtc == startUtc, "successful recovery resets elapsed without changing original POL start");
+    sessionStore.Save([recoveredTiming]);
+    Check(new ManagedSessionStore(directory).Load().Single() == recoveredTiming, "last successful recovery survives manager session-store reload");
+    Check(!recoveredTiming.DescribeTiming(recoveryUtc.AddSeconds(12), false).Contains("Session elapsed") && recoveredTiming.DescribeTiming(recoveryUtc, false).Contains("Last recovered:"), "stopped process retains timestamps without an advancing running counter");
+    Check(timing.DescribeTiming(startUtc.AddSeconds(-1), true).Contains("00:00:00"), "backward clock change cannot display negative elapsed time");
+    Check((timing with { LastRecoveredUtc = recoveryUtc.AddDays(-1) }).DescribeTiming(startUtc.AddMinutes(2), true).Contains("00:02:00"), "a new process counts from its own start instead of an older recovery");
+    File.WriteAllText(Path.Combine(directory, "managed-sessions.json"), System.Text.Json.JsonSerializer.Serialize(new[] { new { managed.AccountId, managed.Process, managed.PolPath } }));
+    Check(sessionStore.Load().Single().LastRecoveredUtc == null, "older session files load without inventing recovery history");
     var corruptSessions = "[{invalid]";
     File.WriteAllText(Path.Combine(directory, "managed-sessions.json"), corruptSessions);
     try { sessionStore.Load(); throw new Exception("corrupt session mappings accepted"); }

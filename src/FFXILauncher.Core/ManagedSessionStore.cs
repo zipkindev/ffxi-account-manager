@@ -2,8 +2,18 @@ using System.Text.Json;
 
 namespace FFXILauncher.Core;
 
-public sealed record ManagedSession(Guid AccountId, ManagedProcess Process, string PolPath)
+public sealed record ManagedSession(Guid AccountId, ManagedProcess Process, string PolPath, DateTimeOffset? LastRecoveredUtc = null)
 {
+    public string DescribeTiming(DateTimeOffset now, bool running)
+    {
+        var start = new DateTimeOffset(Process.StartedUtc);
+        var anchor = LastRecoveredUtc is {} recovered && recovered > start ? recovered : start;
+        var elapsed = now > anchor ? now - anchor : TimeSpan.Zero;
+        var duration = (elapsed.Days > 0 ? elapsed.Days + "d " : "") + elapsed.ToString(@"hh\:mm\:ss");
+        return $"POL started: {start.ToLocalTime():MMM d, yyyy h:mm:ss tt}" +
+            (running ? $" · Session elapsed: {duration}" : " · Not running") +
+            "\nLast recovered: " + (LastRecoveredUtc is {} last ? last.ToLocalTime().ToString("MMM d, yyyy h:mm:ss tt") : "—");
+    }
     public bool Matches(ManagedProcess live, string executablePath) => Process == live && PolPath.Equals(executablePath, StringComparison.OrdinalIgnoreCase);
 }
 
