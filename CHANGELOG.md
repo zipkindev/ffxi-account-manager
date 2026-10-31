@@ -1,5 +1,41 @@
 # Release notes
 
+## 1.0.42
+
+- Release the combined character-stat and notification updates: current/maximum EXP, merits, capacity and job points; optional Telegram bot setup with chat lookup, test delivery and encrypted token storage; custom event profiles and maintenance thresholds; per-character notification toggles beside the existing policies, with a dropdown only when custom profiles exist.
+- Include alerts for applicable maintenance, in-game warnings, confirmed death, failed recovery, capped points and each observed master-level gain. Suppress repeated samples and bound delivery retries.
+- Include corrected HP/MP maxima using validated passive character/job evidence, preserving current values when the API maximum is stale. Preserve saved recovery settings, login validation and running games during the normal protected update.
+
+- Show current Exemplar Points and the requirement for the next master level, with a capped label at ML 50. Observe ordinary stat updates and Exemplar Point reward messages; older point reports remain compatible.
+- Obtain a missing merit baseline with one ordinary stats request after loading/logging in. Skip it when the cached merit baseline is present, and never retry it on the reporting timer or zone changes. Companion addon 0.4.1 includes both changes.
+- Live character counters confirmed after reloading the updated addon on October 30, 2026. Windows installation verified the bundled helpers, native graphics, deployed addon and preservation of three running games and saved policies. Telegram transport is covered by automated fake-HTTP checks; bot-specific delivery remains a user setup test.
+
+## 1.0.41
+
+- Place each character’s Notifications toggle with Auto login, Maintain connection and maintenance scheduling. Show a character profile selector only after a custom alert profile is created; default event choices remain in the shared Notifications section.
+- Show progression as current/maximum followed by EXP, Merits, Capacity and Job Points labels. Already-running games must reload FFXIManager to publish progression counters.
+
+## 1.0.40
+
+- Package the combined character progression counters, optional Telegram delivery and custom alert profiles with the passive HP/MP maximum reporting fix for Windows testing. Preserve running games, saved account policies and existing login validation during the normal protected installation.
+
+## 1.0.39
+
+- Resolve stale API maximum HP/MP from validated passive character/job statistics, restoring current/total reporting when an explicit maximum agrees with the current percentages. Bind startup evidence to the actor, zone and job; invalidate it on equipment updates and character/job/zone changes. Keep the existing report cadence and unknown-maximum fallback without estimates or server requests.
+- Add session-bound EXP, merit, capacity and job-point counters with their level/conversion/storage ceilings. Unknown values stay unknown; updated companion addon 0.4.0 observes cached/passive data on the existing stats cadence.
+- Add optional Telegram integration below server maintenance, encrypted bot-token storage, recent-chat lookup, delivery test, and token removal. Each character can enable alerts and select a saved custom event profile.
+- Add profile-specific maintenance thresholds and alerts for in-game warnings, confirmed death, failed session recovery, point caps and every observed master-level gain. Deduplicate observations, bound delivery retries, and preserve notification choices when accounts are edited.
+
+## 1.0.38
+
+- Prevent an inconsistent Windower HP/MP maximum from stopping all character stats, job and weather reports. Preserve observed current values and show an unavailable maximum instead of discarding the report, clamping HP/MP or guessing a maximum. Normal maximum display resumes automatically when the values agree.
+- Keep integer/range, identity, timestamp, zoning and logout checks. Stats remain on the existing one-minute cadence, with no extra server requests or health-screen checks. Companion addon version 0.3.9 includes the reporting fix; already-running characters need only the reporting addon reloaded, with the game and other addons left running.
+
+## 1.0.37
+
+- Keep Connected based on fresh process/session-bound heartbeats and server traffic even when stats are stale, missing or temporarily unreadable. Retain last-known stats with their report timestamp instead of replacing them with an unsupported Alive message.
+- Preserve explicit same-session logout and confirmed disconnect status precedence. Reuse existing cached connection reports without adding OCR, game input, polling or server requests; normal login validation remains compatible.
+
 ## 1.0.36
 
 - Recover confirmed POL-0008 Friend List Communication Error dialogs by clicking their unique bounded Retry button after 30, 60 and 120 seconds, then continuing through the recognized login menus in the same process. Require two matching reads before and after each wait; do not resubmit credentials if POL returns to a login screen.

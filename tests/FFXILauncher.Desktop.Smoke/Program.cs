@@ -453,7 +453,7 @@ var savedLogoutState = File.ReadAllText(stateFile);
 var newPlayerPayload = playerPayload.Replace(playerPayload.Split('\n')[0], new string('b', 32));
 File.WriteAllText(statusFile, newPlayerPayload);
 typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
-if (PlayerText() != "Current · Alive · player stats pending") throw new Exception("A fresh session must not inherit the old session's dead logout state.");
+if (PlayerText() != "Player stats pending") throw new Exception("A fresh session must not inherit the old session's dead logout state or invent current vitals.");
 File.WriteAllText(statusFile, playerPayload);
 File.WriteAllText(stateFile, playerStatePayload.Replace("100\nWest Ronfaure", "280\nMog Garden") + "0\n");
 typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
@@ -462,9 +462,9 @@ if (!PlayerText().Contains("Current · Mog Garden · Alive · HP/MP pending") ||
 File.Delete(statusFile);
 File.WriteAllText(stateFile, savedLogoutState);
 typeof(MainWindow).GetMethod("RefreshSessions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(configured, null);
-Console.WriteLine("PASS: new session defaults alive without stale death, and Mog Garden suppresses legacy false death.");
+Console.WriteLine("PASS: new session waits for matching stats without stale death, and Mog Garden suppresses legacy false death.");
 var toggles = configured.GetLogicalDescendants().OfType<ToggleSwitch>().ToArray();
-if (toggles.Length != 6) throw new Exception("Auto login and maintenance require separate controls.");
+if (toggles.Count(t => !Equals(t.Content, "Notifications") && !Equals(t.Content, "Enable Telegram delivery")) != 6) throw new Exception("Auto login and maintenance require separate controls.");
 var autoToggle = toggles.First(t => Equals(t.Content, "Auto login"));
 var toggle = toggles.First(t => Equals(t.Content, "Maintain connection"));
 toggle.IsChecked = false;
@@ -719,6 +719,7 @@ configured.MouseUp(new Point(-10, from.Y - 20), MouseButton.Left);
 Dispatcher.UIThread.RunJobs();
 if (!new ConfigurationStore(directory).Load().ConfiguredAccounts.Select(a => a.Id).SequenceEqual(reordered.Select(a => a.Id))) throw new Exception("Dropping outside the list must not reorder accounts.");
 Console.WriteLine("PASS: pointer drag persists character order, preserves account settings and selection, and rejects drops outside the list.");
+NotificationUiRegression.Run(configured, directory, mainAccount.Id);
 configured.Close();
 File.WriteAllText(Path.Combine(directory, "accounts.json"), "{broken");
 var broken = new MainWindow(directory, false);
@@ -779,6 +780,9 @@ if (OperatingSystem.IsWindows())
             if (HasPid()) throw new Exception("Wrong-world late heartbeat cannot attach process.");
             File.Delete(wrong);
             var correct = Path.Combine(fakeData, "odin_" + uniqueGame.Character!.ToLowerInvariant() + ".status");
+            // Publish connection evidence before attachment: the dashboard now
+            // caches connection reads even while the optional stats are absent.
+            File.WriteAllLines(Path.ChangeExtension(correct, ".connection"), ["1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString(), now.ToString()]);
             File.WriteAllLines(correct, ["1234567890abcdef_123456", uniqueGame.Character!, "Odin", now.ToString(), now.ToString()]);
             adopt.Invoke(lateWindow, null); refresh.Invoke(lateWindow, null);
             if (!HasPid()) throw new Exception("Fresh heartbeat appearing after startup must attach existing configured account.");
@@ -815,6 +819,32 @@ if (OperatingSystem.IsWindows())
             refresh.Invoke(lateWindow, null);
             string LiveStatus() => lateWindow.GetLogicalDescendants().OfType<TextBlock>().Single(t => t.Name == "SessionStatus_" + lateAccount.Id.ToString("N")).Text!;
             if (!LiveStatus().Contains("Connected") || LiveStatus().Contains("unverified")) throw new Exception("Matching fresh character and server reports must show Connected, including when Maintain connection is off.");
+            File.WriteAllLines(state, header.Concat(new[] { "3214", "2731", "830", "1074", "0", "100", "Fixture zone", "0" }));
+            refresh.Invoke(lateWindow, null);
+            if (!LiveStatus().Contains("Connected") || !lateWindow.GetLogicalDescendants().OfType<TextBlock>().Any(t => (t.Text ?? "").Contains("Current · Fixture zone · Alive · HP 3214 (max unavailable) · MP 830/1074")))
+                throw new Exception("A lower reported maximum must not hide current stats or downgrade Connected on the character card.");
+            var staleHeader = header.Select((v, i) => i == 3 ? (now - 300).ToString() : i == 4 ? (now - 180).ToString() : v).ToArray();
+            var vitals = new[] { "100", "100", "50", "50", "0", "100", "Fixture zone", "0" };
+            File.WriteAllLines(state, staleHeader.Concat(vitals));
+            refresh.Invoke(lateWindow, null);
+            if (!LiveStatus().Contains("Connected") || !lateWindow.GetLogicalDescendants().OfType<TextBlock>().Any(t => (t.Text ?? "").Contains("Last reported · Fixture zone") && (t.Text ?? "").Contains("Stats reported")))
+                throw new Exception("Stale display stats must retain their timestamp without downgrading independently verified connectivity.");
+            File.Delete(state); refresh.Invoke(lateWindow, null);
+            if (!LiveStatus().Contains("Connected")) throw new Exception("Missing stats must not downgrade fresh session-bound connection evidence.");
+            File.WriteAllLines(state, header.Concat(vitals));
+            using (var lockedStats = new FileStream(state, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                refresh.Invoke(lateWindow, null);
+                if (!LiveStatus().Contains("Connected")) throw new Exception("Unreadable stats must not downgrade independently verified connectivity.");
+            }
+            File.WriteAllLines(state, header.Concat(vitals.Select((v, i) => i == 7 ? now.ToString() : v)));
+            refresh.Invoke(lateWindow, null);
+            if (LiveStatus().Contains("Connected")) throw new Exception("Explicit logout for the current session must override lingering connection reports.");
+            File.WriteAllLines(state, header.Select((v, i) => i == 0 ? "abcdef1234567890_654321" : v).Concat(vitals.Select((v, i) => i == 7 ? now.ToString() : v)));
+            refresh.Invoke(lateWindow, null);
+            if (!LiveStatus().Contains("Connected")) throw new Exception("An old session's stats/logout cannot invalidate the current session's connection evidence.");
+            File.WriteAllLines(state, header.Concat(vitals));
+            Console.WriteLine("PASS: stale/missing/locked stats preserve Connected and last-known stats; only matching-session logout overrides connection evidence.");
             var hints = (Dictionary<Guid, string>)typeof(MainWindow).GetField("connectionStates", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(lateWindow)!;
             var retryBudget = new FriendListRetryStore(lateDirectory);
             for (var attempt = 0; attempt < 3; attempt++) retryBudget.ReserveRetry(lateAccount.Id, uniqueGame.Process);

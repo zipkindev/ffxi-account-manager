@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace FFXILauncher.Core;
 
 public sealed record CharacterState(string Nonce, DateTimeOffset ReportedUtc, int Hp, int MaxHp,
-    int Mp, int MaxMp, bool IsDead, int ZoneId, string Zone, DateTimeOffset? LoggedOutUtc, ZoneEnvironment? Environment = null, CharacterJobs? Jobs = null)
+    int Mp, int MaxMp, bool IsDead, int ZoneId, string Zone, DateTimeOffset? LoggedOutUtc, ZoneEnvironment? Environment = null, CharacterJobs? Jobs = null, CharacterPoints? Points = null)
 {
     public bool DeathConfirmed => IsDead && Hp == 0 && ZoneId != 280 &&
         !Zone.Equals("Mog House", StringComparison.OrdinalIgnoreCase) && !Zone.Equals("Mog Garden", StringComparison.OrdinalIgnoreCase);
@@ -11,12 +11,15 @@ public sealed record CharacterState(string Nonce, DateTimeOffset ReportedUtc, in
     {
         var condition = DeathConfirmed ? (LoggedOutUtc != null ? "Dead at logout" : "Dead") : "Alive";
         var prefix = live ? "Current" : LoggedOutUtc != null ? "Last logout" : "Last reported";
-        var vitals = Hp == 0 && !DeathConfirmed ? "HP/MP pending" : $"HP {Hp}/{MaxHp} · MP {Mp}/{MaxMp}";
+        static string Vital(string label, int current, int maximum) => current > maximum
+            ? $"{label} {current} (max unavailable)" : $"{label} {current}/{maximum}";
+        var vitals = Hp == 0 && !DeathConfirmed ? "HP/MP pending" : $"{Vital("HP", Hp, MaxHp)} · {Vital("MP", Mp, MaxMp)}";
         var text = $"{prefix} · {Zone} · {condition} · {vitals}";
         if (live && includeEnvironment) text += Environment is {} environment ? "\n" + environment.Describe() : "\nWeather / Vana’diel time / moon pending · reload FFXIManager";
         if (!live) text += $"\nStats reported {ReportedUtc.ToLocalTime():g}";
         if (LoggedOutUtc is { } logout) text += $" · Logged out {logout.ToLocalTime():g}";
         if (Jobs != null) text = (live ? "" : "Last job · ") + Jobs.Describe() + "\n" + text;
+        text += "\n" + (Points?.Describe(Jobs?.MasterLevel, Jobs?.MainLevel == 99) ?? "EXP / merits / capacity / job points pending · reload FFXIManager");
         return text;
     }
 }
@@ -50,9 +53,9 @@ public sealed class CharacterStateReader(string dataDirectory)
             !lines[2].Equals(account.World, StringComparison.OrdinalIgnoreCase) ||
             !long.TryParse(lines[3], out var registered) || !long.TryParse(lines[4], out var reported) ||
             !int.TryParse(lines[5], out var hp) || hp < 0 ||
-            !int.TryParse(lines[6], out var maxHp) || maxHp <= 0 || hp > maxHp ||
+            !int.TryParse(lines[6], out var maxHp) || maxHp <= 0 ||
             !int.TryParse(lines[7], out var mp) || mp < 0 ||
-            !int.TryParse(lines[8], out var maxMp) || maxMp < 0 || mp > maxMp ||
+            !int.TryParse(lines[8], out var maxMp) || maxMp < 0 ||
             lines[9] is not ("0" or "1") || !int.TryParse(lines[10], out var zoneId) || zoneId <= 0 ||
             string.IsNullOrWhiteSpace(lines[11]) || lines[11].Length > 256 || lines[11].Any(char.IsControl) ||
             !long.TryParse(lines[12], out var loggedOut) || loggedOut < 0) return null;
@@ -64,9 +67,30 @@ public sealed class CharacterStateReader(string dataDirectory)
             if (start > report || report > now.AddSeconds(3) || logout < report || logout > now.AddSeconds(3)) return null;
             return new(lines[0], report, hp, maxHp, mp, maxMp, lines[9] == "1", zoneId, lines[11], logout,
                 ReadEnvironment(Path.ChangeExtension(path, ".environment"), lines, zoneId),
-                ReadJobs(Path.ChangeExtension(path, ".jobs"), lines));
+                ReadJobs(Path.ChangeExtension(path, ".jobs"), lines),
+                ReadPoints(Path.ChangeExtension(path, ".points"), lines));
         }
         catch (ArgumentOutOfRangeException) { return null; }
+    }
+    private static CharacterPoints? ReadPoints(string path, string[] state)
+    {
+        try
+        {
+            if (!File.Exists(path) || new FileInfo(path).Length > 4096) return null;
+            var lines = File.ReadAllLines(path);
+            if (lines.Length is not (11 or 13) || !lines.Take(5).SequenceEqual(state.Take(5))) return null;
+            var values = new int?[8];
+            int[] maxima = [1000000, 1000000, 75, 75, CharacterPoints.CapacityMaximum, CharacterPoints.JobPointMaximum, int.MaxValue, int.MaxValue];
+            for (var i = 0; i < lines.Length - 5; i++)
+            {
+                if (!int.TryParse(lines[i + 5], out var value) || value < -1 || value > maxima[i]) return null;
+                values[i] = value == -1 ? null : value;
+            }
+            if (values[1] == 0 || values[3] == 0 || values[0] > values[1] || values[2] > values[3]) return null;
+            return new(values[0], values[1], values[2], values[3], values[4], values[5], values[6], values[7]);
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
     private static CharacterJobs? ReadJobs(string path, string[] state)
     {

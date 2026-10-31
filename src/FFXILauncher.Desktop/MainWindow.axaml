@@ -118,6 +118,27 @@
             </Button>
           </Grid>
         </StackPanel></Border>
+        <Border x:Name="NotificationPanel" Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20">
+          <StackPanel Spacing="10">
+            <TextBlock Text="Notifications" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="Optional Telegram delivery. Enable notifications and choose an alert profile on each character. The manager must remain open to send alerts." Classes="muted" TextWrapping="Wrap" />
+            <ToggleSwitch x:Name="TelegramEnabled" Content="Enable Telegram delivery" />
+            <TextBlock Text="1. Create a bot with @BotFather in Telegram and copy its token. 2. Send /start to your bot (or add it to your group). 3. Click Find chat ID, select your chat, save, and send a test." Classes="muted" TextWrapping="Wrap" />
+            <TextBox x:Name="TelegramToken" PlaceholderText="BotFather token" PasswordChar="●" />
+            <Button Content="Find chat ID" Click="FindTelegramChat" HorizontalAlignment="Left" />
+            <ComboBox x:Name="TelegramChatPicker" IsVisible="False" SelectionChanged="TelegramChatChanged" HorizontalAlignment="Stretch" />
+            <TextBox x:Name="TelegramChatId" PlaceholderText="Chat ID (for example 123456789 or -1001234567890)" />
+            <WrapPanel><Button Content="Save Telegram" Click="SaveTelegram" Margin="0,0,8,8" /><Button Content="Send test" Click="TestTelegram" Margin="0,0,8,8" /><Button Content="Remove saved token" Click="ClearTelegram" Margin="0,0,8,8" /></WrapPanel>
+            <TextBlock Text="Alert profiles" FontWeight="SemiBold" />
+            <WrapPanel><ComboBox x:Name="NotificationProfilePicker" MinWidth="220" SelectionChanged="NotificationProfileChanged" Margin="0,0,8,8" /><Button Content="New profile" Click="AddNotificationProfile" Margin="0,0,8,8" /><Button Content="Delete profile" Click="DeleteNotificationProfile" Margin="0,0,8,8" /></WrapPanel>
+            <TextBox x:Name="NotificationProfileName" PlaceholderText="Profile name" MaxLength="80" />
+            <WrapPanel x:Name="NotificationEventChoices" />
+            <WrapPanel><TextBlock Text="Maintenance alert threshold (hours before start)" VerticalAlignment="Center" Margin="0,0,12,0" /><NumericUpDown x:Name="NotificationMaintenanceHours" Minimum="0" Maximum="168" Value="12" Increment="1" FormatString="0" Width="144" /></WrapPanel>
+            <TextBlock Text="0 = active maintenance only. In-game warnings alert immediately. Caps alert once until points are spent. Capacity converts at 30,000; stored capacity caps at 29,999. Master-level alerts compare observations on the same job and session." Classes="muted" TextWrapping="Wrap" />
+            <Button Content="Save alert profile" Click="SaveNotificationProfile" HorizontalAlignment="Left" />
+            <TextBlock x:Name="NotificationStatus" Text="Telegram is optional. No messages are sent until configured." Classes="muted" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
         <Border Background="{DynamicResource ThemeSurfaceBrush}" CornerRadius="12" Padding="20"><StackPanel Spacing="10">
           <Grid ColumnDefinitions="*,Auto"><TextBlock Text="Running sessions" FontSize="18" FontWeight="SemiBold" /><Button Grid.Column="1" Content="Discover sessions" Click="DiscoverSessions" /></Grid>
           <TextBlock Text="Attach existing characters without relaunching. Account and world details are confirmed during setup." Classes="muted" TextWrapping="Wrap" />

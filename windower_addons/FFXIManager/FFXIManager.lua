@@ -1,6 +1,6 @@
 _addon.name = 'FFXIManager'
 _addon.author = 'FFXI Account Manager'
-_addon.version = '0.3.8'
+_addon.version = '0.4.1'
 _addon.commands = {'ffximanager'}
 local resources = require('resources')
 local packets = require('packets')
@@ -14,6 +14,9 @@ local last_unblocked, last_blocked, unblocked_count, blocked_count = 0, 0, 0, 0
 local last_report = nil
 local startup_followup_at = nil
 local master = nil
+local progression = nil
+local merit_points, merit_cap, limit_points = nil, nil, nil
+local merit_refresh_requested = false
 local seen_nonces = {}
 local stem = nil
 local last_state = nil
@@ -44,11 +47,76 @@ local function identity()
     if not world or not player.name:match('^[A-Za-z]+$') or not world:match('^[A-Za-z]+$') then return nil end
     return player.name, world, player, info
 end
-local function capture_master(original)
-    local character, world, player = identity()
+-- Keep explicit server maxima separately from Windower's potentially older
+-- 0x061 API cache. Never calculate a maximum from a rounded percentage.
+local maximums, maximum_key = nil, nil
+local maximum_bootstrap = true
+local function maximum_integer(value, minimum)
+    return type(value) == 'number' and value >= minimum and value <= 2147483647 and value % 1 == 0
+end
+local function maximum_context(character, world, player, info)
+    if not maximum_integer(player.id, 1) or not maximum_integer(info.zone, 1) then return nil end
+    local key = table.concat({character, world, player.id, player.main_job_id, info.zone}, ':')
+    if key ~= maximum_key then maximums, maximum_key = nil, key end
+    return key
+end
+local function maximum_packet(packet, player)
+    return packet and packet['Main Job'] == player.main_job_id and
+        maximum_integer(packet['Maximum HP'], 1) and maximum_integer(packet['Maximum MP'], 0)
+end
+local function remember_maximums(packet, character, world, player, info)
+    local key = maximum_context(character, world, player, info)
+    if key and maximum_packet(packet, player) then
+        maximums = {key = key, hp = packet['Maximum HP'], mp = packet['Maximum MP']}
+        maximum_bootstrap = false
+    end
+end
+local function coherent_maximum(current, maximum, percent)
+    if not maximum_integer(current, 0) or not maximum_integer(percent, 0) or percent > 100 or current > maximum then return false end
+    if maximum == 0 then return current == 0 and percent == 0 end
+    local ratio = current * 100 / maximum
+    return percent >= math.floor(ratio) and percent <= math.ceil(ratio)
+end
+local function report_maximums(character, world, player, info)
+    local key = maximum_context(character, world, player, info)
+    if key and maximum_bootstrap then
+        maximum_bootstrap = false
+        local function cached(id)
+            if not windower.packets or not windower.packets.last_incoming then return nil end
+            local ok, raw = pcall(windower.packets.last_incoming, id)
+            if not ok or not raw then return nil end
+            local parsed, packet = pcall(packets.parse, 'incoming', raw)
+            return parsed and packet or nil
+        end
+        local zone, jobs = cached(0x00A), cached(0x01B)
+        -- Bootstrap only when both caches agree and the zone packet identifies
+        -- this exact actor, zone and job. Do not import another login's totals.
+        if zone and zone.Player == player.id and zone.Zone == info.zone and zone['Main Job'] == player.main_job_id and
+            maximum_packet(jobs, player) and zone['Max HP'] == jobs['Maximum HP'] and zone['Max MP'] == jobs['Maximum MP'] then
+            remember_maximums(jobs, character, world, player, info)
+        end
+    end
+    local v = player.vitals
+    local hp, mp = v.max_hp, v.max_mp
+    if maximums and maximums.key == key then
+        if coherent_maximum(v.hp, maximums.hp, v.hpp) then hp = maximums.hp end
+        if coherent_maximum(v.mp, maximums.mp, v.mpp) then mp = maximums.mp end
+    end
+    return hp, mp
+end
+local function invalidate_maximums()
+    maximums, maximum_key, maximum_bootstrap = nil, nil, false
+end
+
+local function capture_master(original, fresh)
+    local character, world, player, info = identity()
     if not character then return end
     local ok, packet = pcall(packets.parse, 'incoming', original)
     if not ok or not packet or packet['Main Job'] ~= player.main_job_id then return end
+    if fresh then remember_maximums(packet, character, world, player, info) end
+    progression = {character = character, world = world, job = player.main_job_id,
+        exp = packet['Current EXP'], exp_cap = packet['Required EXP'],
+        ep = packet['Current Exemplar Points'], ep_required = packet['Required Exemplar Points']}
     local level = packet['Master Level']
     if type(level) == 'number' and level >= 0 and level <= 50 and level % 1 == 0 then
         master = {character = character, world = world, job = player.main_job_id, level = level}
@@ -58,13 +126,21 @@ local function capture(character, world, player, info, now)
     local v = player.vitals
     -- Ignore incomplete data while zoning; preserve the last usable report.
     if not v or not v.hp or not v.max_hp or not v.mp or not v.max_mp or not info.zone or info.zone == 0 then return end
-    if v.max_hp <= 0 or v.hp < 0 or v.hp > v.max_hp or v.mp < 0 or v.max_mp < 0 or v.mp > v.max_mp then return end
+    local function stat_integer(value)
+        return type(value) == 'number' and value >= 0 and value <= 2147483647 and value % 1 == 0
+    end
+    if not stat_integer(v.hp) or not stat_integer(v.max_hp) or v.max_hp == 0 or
+        not stat_integer(v.mp) or not stat_integer(v.max_mp) then return end
+    -- Windower can retain a lower cached maximum after HP/MP changes. Preserve
+    -- the observed values; the manager marks an inconsistent maximum unavailable.
+    -- It must not suppress current HP/MP, job and environment reports indefinitely.
+    local max_hp, max_mp = report_maximums(character, world, player, info)
     local zone = resources.zones and resources.zones[info.zone]
     local name = (zone and zone.en or ('Zone ' .. info.zone)):gsub('[\r\n]', ' '):sub(1, 256)
     -- Zero HP can be an incomplete startup sample, not death evidence.
     local safe_area = info.mog_house == true or info.zone == 280
     local dead = not safe_area and v.hp == 0 and (player.status == 2 or player.status == 3)
-    last_state = table.concat({session, character, world, registered, now, v.hp, v.max_hp, v.mp, v.max_mp,
+    last_state = table.concat({session, character, world, registered, now, v.hp, max_hp, v.mp, max_mp,
         dead and '1' or '0', info.zone, name}, '\n') .. '\n'
     write(root .. stem .. '.state', last_state .. '0\n')
     -- Read existing player data and cached server stats; no server requests.
@@ -72,6 +148,15 @@ local function capture(character, world, player, info, now)
         if windower.packets and windower.packets.last_incoming then
             local ok, original = pcall(windower.packets.last_incoming, 0x061)
             if ok and original then capture_master(original) end
+        end
+    end
+    if not merit_points and windower.packets and windower.packets.last_incoming then
+        local ok, original = pcall(windower.packets.last_incoming, 0x063)
+        if ok and original then
+            local parsed, packet = pcall(packets.parse, 'incoming', original)
+            if parsed and packet and packet.Order == 2 then
+                merit_points, merit_cap, limit_points = packet['Merit Points'], packet['Max Merit Points'], packet['Limit Points']
+            end
         end
     end
     local main, sub = player.main_job, player.sub_job
@@ -84,6 +169,16 @@ local function capture(character, world, player, info, now)
         write(root .. stem .. '.jobs', table.concat({session, character, world, registered, now,
             ml, main, main_level, sub, sub_level}, '\n') .. '\n')
     end
+    -- Optional progression sidecar; -1 means unavailable, never a fabricated zero.
+    local function point(value, maximum)
+        return stat_integer(value) and value <= maximum and value or -1
+    end
+    local xp = progression and progression.character == character and progression.world == world and
+        progression.job == player.main_job_id and progression or {}
+    local jp = player.job_points and type(main) == 'string' and player.job_points[main:lower()] or {}
+    write(root .. stem .. '.points', table.concat({session, character, world, registered, now,
+        point(xp.exp, 1000000), point(xp.exp_cap, 1000000), point(merit_points, 75), point(merit_cap, 75),
+        point(jp.cp, 29999), point(jp.jp, 500), point(xp.ep, 2147483647), point(xp.ep_required, 2147483647)}, '\n') .. '\n')
     -- Zone environment uses the same session and report time as the vitals.
     -- It is independent of shutdown state so older managers remain compatible.
     local function label(collection, id)
@@ -121,6 +216,15 @@ local function poll()
         capture(character, world, player, info, now)
         last_report = now
         if startup_followup_at and now >= startup_followup_at then startup_followup_at = nil end
+    end
+    -- A cache entry for 0x063 may be the job-point subtype, leaving merits
+    -- unavailable indefinitely after reload. Request the ordinary equipment/stats
+    -- response once per login/addon load, only if the merit baseline is missing.
+    if merit_points == nil and not merit_refresh_requested and packets.new and packets.inject then
+        merit_refresh_requested = true
+        pcall(function()
+            packets.inject(packets.new('outgoing', 0x061, {_unknown1 = string.rep('\0', 4)}))
+        end)
     end
     local request_path = root .. stem .. '.request'
     local payload = read(request_path)
@@ -174,6 +278,7 @@ local function report_change()
     last_report = now
 end
 local function startup_report()
+    maximums, maximum_key, maximum_bootstrap = nil, nil, true
     last_connection_report = nil
     last_report = nil
     startup_followup_at = nil
@@ -196,6 +301,10 @@ windower.register_event('logout', function()
     last_report = nil
     startup_followup_at = nil
     master = nil
+    invalidate_maximums()
+    progression = nil
+    merit_points, merit_cap, limit_points = nil, nil, nil
+    merit_refresh_requested = false
     last_connection_report = nil
     shutdown_pending_until = 0
     stem = nil
@@ -216,7 +325,51 @@ windower.register_event('incoming chunk', function(id, original, modified, injec
     end
     last_unblocked = last_incoming
     unblocked_count = unblocked_count + 1
-    if id == 0x061 then capture_master(original); return end
+    if id == 0x050 then invalidate_maximums(); return end
+    if id == 0x061 then capture_master(original, true); return end
+    if id == 0x01B then
+        local character, world, player, info = identity()
+        if character then
+            local ok, packet = pcall(packets.parse, 'incoming', original)
+            if ok then remember_maximums(packet, character, world, player, info) end
+        end
+        return
+    end
+    if id == 0x063 then
+        local ok, packet = pcall(packets.parse, 'incoming', original)
+        if ok and packet and packet.Order == 2 then
+            merit_points, merit_cap, limit_points = packet['Merit Points'], packet['Max Merit Points'], packet['Limit Points']
+        end
+        return
+    end
+    if id == 0x02D or id == 0x029 then
+        local ok, packet = pcall(packets.parse, 'incoming', original)
+        if not ok or not packet then return end
+        local amount, message = packet['Param 1'], packet.Message
+        if type(amount) ~= 'number' or amount < 0 or amount % 1 ~= 0 then return end
+        local character, world, player = identity()
+        if not character then return end
+        if (message == 8 or message == 105) and progression and progression.character == character and
+            progression.world == world and progression.job == player.main_job_id and
+            type(progression.exp) == 'number' and type(progression.exp_cap) == 'number' and progression.exp_cap > 0 then
+            local total = progression.exp + amount
+            if player.main_job_level == 99 then progression.exp = math.min(total, progression.exp_cap - 1)
+            elseif total < progression.exp_cap then progression.exp = total
+            else progression = nil end -- New level requires a fresh authoritative baseline.
+        elseif (message == 809 or message == 810) and progression and progression.character == character and
+            progression.world == world and progression.job == player.main_job_id and
+            type(progression.ep) == 'number' and type(progression.ep_required) == 'number' and progression.ep_required > 0 then
+            local total = progression.ep + amount
+            if total < progression.ep_required then progression.ep = total
+            else progression.ep, progression.ep_required = nil, nil end -- Next level needs its authoritative threshold.
+        elseif (message == 371 or message == 372) and type(limit_points) == 'number' and
+            type(merit_points) == 'number' and type(merit_cap) == 'number' then
+            local total = limit_points + amount
+            merit_points = math.min(merit_cap, merit_points + math.floor(total / 10000))
+            limit_points = merit_points < merit_cap and total % 10000 or math.min(total, 9999)
+        end
+        return
+    end
     if id ~= 0x017 then return end
     local ok, packet = pcall(packets.parse, 'incoming', original)
     if not ok or not packet or (packet.Mode ~= 6 and packet.Mode ~= 7) then return end

@@ -112,7 +112,12 @@ public sealed class AccountDialog : Window
             var hasSe = !string.IsNullOrEmpty(se.Text);
             var hasMember = !string.IsNullOrEmpty(memberPassword.Text);
             if (forget.IsChecked == true && (hasPol || hasSe || hasMember)) { error.Text = "Choose either new passwords or deletion."; return; }
-            var updated = new AccountConfiguration(account?.Id ?? Guid.NewGuid(), string.IsNullOrWhiteSpace(label.Text) ? (name.Length > 0 ? name : seId.Text!.Trim()) : label.Text.Trim(), (profile.SelectedItem as WindowerProfileChoice)?.Value ?? "", name, world.SelectedItem as string ?? "", member.Text?.Trim() ?? "", seId.Text?.Trim() ?? "", account?.MaintainConnection ?? false, account?.AutoLogin ?? false, polId.Text?.Trim().ToUpperInvariant() ?? "", account?.ScheduleMaintenance ?? false, polSaved.IsChecked == true, needsMember.IsChecked == true, otp.IsChecked == true);
+            var updated = new AccountConfiguration(account?.Id ?? Guid.NewGuid(), string.IsNullOrWhiteSpace(label.Text) ? (name.Length > 0 ? name : seId.Text!.Trim()) : label.Text.Trim(), (profile.SelectedItem as WindowerProfileChoice)?.Value ?? "", name, world.SelectedItem as string ?? "", member.Text?.Trim() ?? "", seId.Text?.Trim() ?? "", account?.MaintainConnection ?? false, account?.AutoLogin ?? false, polId.Text?.Trim().ToUpperInvariant() ?? "", account?.ScheduleMaintenance ?? false, polSaved.IsChecked == true, needsMember.IsChecked == true, otp.IsChecked == true)
+            {
+                RecoveryPauseReason = account?.RecoveryPauseReason,
+                NotificationsEnabled = account?.NotificationsEnabled ?? false,
+                NotificationProfileId = account?.NotificationProfileId ?? NotificationProfile.DefaultId
+            };
             var passwords = (hasPol || hasSe || hasMember) && vaultAvailable ? new AccountCredentials(pol.Text!, se.Text!, memberPassword.Text!) : null;
             pol.Text = ""; se.Text = ""; memberPassword.Text = "";
             Close(new AccountEdit(updated, passwords, forget.IsChecked == true));

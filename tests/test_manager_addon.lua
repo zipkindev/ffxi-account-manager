@@ -182,5 +182,46 @@ assert(not read('odin_hauplibond.jobs'):find('\n49\nDRK\n', 1, true), 'blocked p
 events['incoming chunk'](0x00A, '', nil, true, false)
 now = now + 30; events.prerender()
 assert(connection()[6] == tostring(blocked_incoming_at), 'injected packets cannot refresh liveness on the next scheduled publication')
+-- Nanakia's observed mismatch must not freeze the entire stats report.
+player.vitals.hp, player.vitals.max_hp = 3214, 2731
+player.vitals.mp, player.vitals.max_mp = 830, 500
+now = now + 60; events.prerender()
+local over_maximum = assert(read('odin_hauplibond.state'))
+assert(over_maximum:find('3214\n2731\n830\n500\n0\n', 1, true), 'preserve observed vitals even when cached maxima are lower; never clamp or fabricate')
+local current_jobs = assert(read('odin_hauplibond.jobs'))
+local current_environment = assert(read('odin_hauplibond.environment'))
+assert(current_jobs:find('\n' .. now .. '\n', 1, true) and current_environment:find('\n' .. now .. '\n', 1, true), 'job and weather timestamps advance with inconsistent maxima')
+now = now + 59; events.prerender()
+assert(read('odin_hauplibond.state') == over_maximum, 'maximum mismatch does not increase sampling frequency')
+player.vitals.hp = -1
+now = now + 1; events.prerender()
+assert(read('odin_hauplibond.state') == over_maximum, 'negative vitals cannot replace the last usable report')
+player.vitals.hp = 2147483648
+now = now + 60; events.prerender()
+assert(read('odin_hauplibond.state') == over_maximum, 'out-of-range vitals cannot replace the last usable report')
+player.vitals.hp, player.vitals.max_hp, player.vitals.mp, player.vitals.max_mp = 3214, 3214, 830, 1074
+now = now + 60; events.prerender()
+assert(read('odin_hauplibond.state'):find('3214\n3214\n830\n1074\n0\n', 1, true), 'normal maxima resume without any reset or extra request')
+-- Progression is optional, session-bound and reported on the same cadence.
+player.job_points = {drk = {cp = 29999, jp = 500}, pld = {cp = 12, jp = 3}}
+events['incoming chunk'](0x061, {['Main Job'] = 8, ['Master Level'] = 47, ['Current EXP'] = 12345, ['Required EXP'] = 56000}, nil, false)
+events['incoming chunk'](0x063, {Order = 2, ['Merit Points'] = 74, ['Max Merit Points'] = 75, ['Limit Points'] = 9500}, nil, false)
+now = now + 60; events.prerender()
+assert(read('odin_hauplibond.points'):find('\n12345\n56000\n74\n75\n29999\n500\n', 1, true), 'progression includes authoritative EXP, character merit cap and job-specific CP/JP')
+local before_points = read('odin_hauplibond.points')
+events['incoming chunk'](0x02D, {Message = 8, ['Param 1'] = 100}, nil, false)
+events['incoming chunk'](0x02D, {Message = 371, ['Param 1'] = 500}, nil, false)
+now = now + 59; events.prerender()
+assert(read('odin_hauplibond.points') == before_points, 'point gains do not increase the reporting cadence')
+now = now + 1; events.prerender()
+assert(read('odin_hauplibond.points'):find('\n12445\n56000\n75\n75\n29999\n500\n', 1, true), 'passive reward messages advance EXP and merit points')
+events['incoming chunk'](0x063, {Order = 2, ['Merit Points'] = 1, ['Max Merit Points'] = 30}, nil, true)
+events['incoming chunk'](0x061, {['Main Job'] = 8, ['Master Level'] = 47, ['Current EXP'] = 99, ['Required EXP'] = 56000}, nil, false, true)
+now = now + 60; events.prerender()
+assert(read('odin_hauplibond.points'):find('\n12445\n56000\n75\n75\n', 1, true), 'injected and blocked progression packets cannot replace authoritative counters')
+player.main_job, player.main_job_id = 'PLD', 7
+now = now + 60; events.prerender()
+assert(read('odin_hauplibond.points'):find('\n-1\n-1\n75\n75\n12\n3\n', 1, true), 'job switch cannot inherit EXP or job points from another job')
+player.main_job, player.main_job_id = 'DRK', 8
 os.time = old_time
 print('PASS: addon authentication, session binding, expiry, allowlist, at-most-once shutdown, and logout cleanup')

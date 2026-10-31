@@ -2,6 +2,12 @@
 
 Windows-first account management and launch automation for Windower and Final Fantasy XI, built with Avalonia and .NET 10. Shared UI and core code support a future Linux/SteamDeck adapter.
 
+## Latest release · 1.0.42
+
+[Download the latest Windows release](https://github.com/zipkindev/ffxi-account-manager/releases/latest). This release adds character EXP, merits, capacity/job points and Exemplar Points toward the next master level, plus optional Telegram alerts with per-character toggles and reusable event profiles. It also includes the HP/MP maximum reporting fix and keeps the existing login validation and recovery settings through the normal installation.
+
+After updating, deploy the bundled **FFXIManager 0.4.1** addon and run `//lua reload FFXIManager` in every running character. Fresh sessions load it automatically. Live counter reporting was confirmed after reloading on October 30, 2026.
+
 ## App walkthrough
 
 These screenshots show the actual application UI with example accounts and no saved passwords. Captured in the cross-platform renderer; Windows-only launch controls are disabled in these examples.
@@ -34,7 +40,7 @@ Select cards, then expand **Bulk actions** to apply settings or request graceful
 
 ## Features
 
-- Configure accounts with encrypted credentials, named Windower profiles, and separate Auto login, Maintain connection and maintenance scheduling switches.
+- Configure accounts with encrypted credentials, named Windower profiles, and separate Auto login, Maintain connection, maintenance scheduling and Notifications switches.
 - Launch profiles individually or in batches. Per-account **Launch profile** follows the Auto login switch; bulk **Open profiles** controls leave login to you.
 - Discover and attach existing character sessions using process ownership and companion-addon character/world reports.
 - Complete POL and FFXI login with learned action paths, exact-character verification and guarded input. Keep keyboard and mouse idle during foreground login automation.
@@ -45,14 +51,37 @@ Select cards, then expand **Bulk actions** to apply settings or request graceful
 - Choose saved UI/artwork themes, landscape account cards, and drag-to-reorder account order.
 - Show current jobs and levels in the form **ML 46 99DRK/57WAR**, with last-observed jobs retained offline.
 - Show shared Vana’diel time, weekday element and moon phase; display per-character zone weather with single/double element icons.
+- Track EXP, merits, capacity/job points and current/required Exemplar Points for the next master level, including each counter’s requirement or storage ceiling.
+- Send optional Telegram alerts for maintenance, death, failed recovery, capped points and master-level gains. Choose shared event settings or custom profiles, with an independent opt-in toggle per character.
 
 Character stats, jobs and weather report once per minute. Master level comes from cached/passively observed server-stat packets; an unavailable master level is displayed as unknown. Session health heartbeats and IPC command checks remain separate, and logout is reported immediately. Offline cards retain their last observation rather than claiming current weather.
+
+Windower can report current HP/MP above its reported maximum. Starting in **1.0.38**, that mismatch no longer freezes stats, jobs and weather: current values continue updating, and the affected maximum is shown as unavailable until consistent values return. The manager does not guess a replacement maximum. No sampling or server-traffic frequency increases are needed.
+
+Companion addon 0.4.1 also resolves a stale maximum from passively received character/job statistics when that explicit value agrees with current HP/MP percentages. Startup caches must agree and identify the current actor, zone and job. Equipment updates discard the previous maximum; subsequent character/job-stat packets can supply the new total. This maximum-value correction uses existing packet data without changing equipment or estimating a maximum from percentages. The separate one-time merit initialization request is described below.
+
+## Character points and notifications
+
+Character cards now include current EXP / the level requirement, merits / the character’s current merit cap, capacity points / 30,000 to the next job point, and unspent job points / 500 for the current main job. Stored capacity stops at 29,999; its 30,000 display target is the conversion threshold. Missing values display `?`, never a fabricated zero. Deploy the updated **FFXIManager 0.4.1** addon and reload it in existing sessions. Progression reports share the existing one-minute stats cadence and session/timestamp checks. They observe cached player data and server packets. When the cached merit subtype is missing, addon 0.4.1 makes one ordinary stats request per login/reload to obtain current merits and their cap; it does not repeat that request on the reporting timer or zone changes. Mastered level-99 jobs also show current/required Exemplar Points toward the next master level; ML 50 displays as capped. Reload the updated addon in running games to supply these fields.
+
+![Optional Telegram integration and alert event profiles](docs/images/notifications.png)
+
+**Notifications** sits directly below **Server maintenance**. Telegram is optional and disabled by default:
+
+1. Create a bot with [Telegram’s BotFather](https://core.telegram.org/bots/tutorial#obtain-your-bot-token), then send `/start` to your bot or add it to your group.
+2. Enter the bot token, click **Find chat ID**, and choose your chat. You can also enter a numeric chat ID or `@channel` manually. Bots already using a webhook may require manual entry.
+3. Enable Telegram delivery, **Save Telegram**, and **Send test**. The token is encrypted for the current Windows user in a separate notification vault; it is excluded from `accounts.json` and delivery error messages.
+4. Create or edit an alert profile, save it, then enable **Notifications** alongside the other character toggles. With only the default profile, characters use the event choices below automatically. Creating a custom profile reveals the per-character dropdown so you can select it. Editing an account preserves this selection.
+
+Profiles independently select scheduled maintenance, in-game maintenance warnings, confirmed death, dropped-session recovery failure, merit/capacity/job-point caps, and each observed master level earned. Each profile has its own maintenance lead time (0–168 hours; 0 means active only), independent of the card-display threshold. In-game warnings send immediately when observed. Repeated samples of the same death or cap stay quiet until the condition clears; master levels compare the highest observed level per job/session. New sessions establish a baseline instead of inferring earlier gains. Official maintenance alerts require a fresh verified schedule for the character’s world.
+
+Keep the manager open for delivery. Telegram uses the [Bot API](https://core.telegram.org/bots/api#sendmessage) through a separate notification-sender interface so other delivery methods can be added later. The bounded in-memory queue makes up to three delivery attempts, expires alerts after ten minutes, and shows failures in the notification section. Closing the manager clears queued alerts and observation history; a current death/cap or applicable maintenance may alert again after reopening. **Remove saved token** disables delivery and removes the encrypted token. The Windows package and native graphics were verified during installation, and live character counters were confirmed after the addon reload. Telegram sending is covered with a fake HTTP endpoint; use **Send test** to validate your own bot and chat before relying on delivery.
 
 ## Downloads and requirements
 
 Download the Windows x64 ZIP from [GitHub Releases](https://github.com/zipkindev/ffxi-account-manager/releases/latest). Build artifacts are also available from GitHub Actions (sign-in may be required). The standalone `.exe` needs no ZIP extraction or separate .NET installation. A folder ZIP is also available; extract its entire contents before launching it. The self-contained build does not require a separate .NET installation.
 
-The latest **1.0.27** fix prevents unnecessary focus changes during quiet, healthy connections. Windows folder packages and standalone executables are built by the [main build workflow](https://github.com/zipkindev/ffxi-account-manager/actions/workflows/build.yml?query=branch%3Amain).
+The latest **1.0.42** release includes the new character counters, master-level progress, optional Telegram alerts and corrected HP/MP totals. Windows folder packages and standalone executables are built by the [main build workflow](https://github.com/zipkindev/ffxi-account-manager/actions/workflows/build.yml?query=branch%3Amain).
 
 You need Windows x64, an existing working Windower/PlayOnline/FFXI installation, and configured POL members. This app does not include the game, Windower or a subscription.
 
@@ -92,7 +121,7 @@ In **1.0.36**, a confirmed **POL-0008 Friend List Communication Error** can reco
 
 In **1.0.35**, each tracked account also shows **POL started**, **Session elapsed** and **Last recovered** in local time. Elapsed counts from the process start until a successful automatic recovery resets it; failed attempts and screen checks do not reset it. Recovery timestamps survive manager restarts with the managed session. Existing sessions have no assumed recovery date. Stopped processes keep their timestamps without an advancing counter. These labels use the existing three-second dashboard refresh without extra game or OCR reads.
 
-Healthy cards show **Connected · Character (World)** when fresh character data and matching server traffic verify the tracked process and session. Otherwise a responsive window shows **Process running**. The dashboard shares the watchdog’s cached 30-second connection reads; this status adds no periodic OCR or server requests.
+Healthy cards show **Connected · Character (World)** when a fresh character/world heartbeat and matching server traffic verify the tracked process and session. Stats freshness is independent: missing, stale or temporarily unreadable stats do not remove Connected. Older stats remain visible as **Last reported**, with their report timestamp; an explicit logout for the same session overrides connection evidence. Otherwise a responsive window shows **Process running**. The dashboard shares the watchdog’s cached 30-second connection reads; this status adds no periodic OCR or server requests.
 
 Known game maintenance pauses recovery. Support-center-only notices do not block game reconnection. Credential rejection, intentional shutdown, cancellation and disabling Maintain connection stop the applicable recovery actions. A hung window has a separate cleanup threshold: at least 90 continuous seconds without a rendering heartbeat or recent server traffic. Idle cards show **No process tracked**, with shutdown controls disabled when no process is running.
 

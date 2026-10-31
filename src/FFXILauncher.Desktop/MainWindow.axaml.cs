@@ -98,6 +98,7 @@ public sealed partial class MainWindow : Window
                 store.Save(configuration);
                 nextRetry.Remove(id); disconnectRestarts.Remove(id); maintenanceRestarts.Remove(id);
                 connectionStates.Remove(id);
+                NotifyRecoveryFailure(configuration.ConfiguredAccounts.Single(a => a.Id == id));
                 Log(configuration.ConfiguredAccounts.Single(a => a.Id == id).Label + ": " + AccountConfiguration.ExternalSessionReason);
                 RenderAccounts();
             };
@@ -131,14 +132,15 @@ public sealed partial class MainWindow : Window
         StartEnabledButton.IsEnabled = CanAutoLogin;
         if (discoverOnStartup) DetectInstallationPaths(replaceExisting: false);
         if (discoverOnStartup) RestoreManagedSessions();
+        InitializeNotifications();
         RenderAccounts();
         if (discoverOnStartup && dataDirectory == null && WindowsUnattendedSetup.IsElevated)
             Opened += (_, _) => UpdateExistingControlAddon();
         if (discoverOnStartup) DiscoverSessions(null, new RoutedEventArgs());
-        timer.Tick += async (_, _) => { AttachVerifiedSessions(); CollectCharacterWorlds(); RefreshSessions(); await CheckRecovery(); };
+        timer.Tick += async (_, _) => { AttachVerifiedSessions(); CollectCharacterWorlds(); RefreshSessions(); await CheckRecovery(); CheckMaintenanceNotifications(); await FlushNotifications(); };
         timer.Start();
         SizeChanged += (_, _) => UpdateArtworkLayout();
-        Closed += (_, _) => { shutdown.Cancel(); timer.Stop(); calibrationControl?.Dispose(); (autoLogin as IDisposable)?.Dispose(); themeArtwork?.Dispose(); sideArtwork?.Dispose(); foreach (var bitmap in landscapeArtwork.Values) bitmap.Dispose(); };
+        Closed += (_, _) => { shutdown.Cancel(); timer.Stop(); telegramClient.Dispose(); calibrationControl?.Dispose(); (autoLogin as IDisposable)?.Dispose(); themeArtwork?.Dispose(); sideArtwork?.Dispose(); foreach (var bitmap in landscapeArtwork.Values) bitmap.Dispose(); };
     }
     private async void ShowReleaseNotes(object? sender, RoutedEventArgs args) =>
         await ShowDocument("FFXI Account Manager · v" + AppRelease.Version, AppRelease.Notes);
@@ -187,6 +189,7 @@ public sealed partial class MainWindow : Window
     private void RecordRecoveredSession(Guid id, ManagedProcess process)
     {
         if (!sessions.TryGetValue(id, out var current) || current != process || platform.Inspect(process) == SessionHealth.Exited) return;
+        alertTracker.Recovered(id);
         lastRecovered[id] = DateTimeOffset.UtcNow;
         SaveManagedSessions();
     }
@@ -476,7 +479,7 @@ public sealed partial class MainWindow : Window
         foreach (var account in accounts)
         {
             var body = new StackPanel { Spacing = 8 };
-            var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+            var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,2*"), ColumnSpacing = 12 };
             var identity = new StackPanel { Spacing = 4 };
             var select = new CheckBox { Name = "SelectAccount_" + account.Id.ToString("N"), Content = "Select", IsChecked = selectedAccounts.Contains(account.Id) };
             select.IsCheckedChanged += (_, _) =>
@@ -497,15 +500,16 @@ public sealed partial class MainWindow : Window
             identity.Children.Add(new TextBlock { Text = (string.IsNullOrWhiteSpace(account.Character) ? "Character not selected" : account.Character) + " · " + (string.IsNullOrWhiteSpace(account.SquareEnixId) ? "SE ID needs configuration" : "SE ID: " + account.SquareEnixId), Foreground = string.IsNullOrWhiteSpace(account.SquareEnixId) ? ThemeCatalog.BrushFor("Danger") : ThemeCatalog.BrushFor("Muted"), TextWrapping = TextWrapping.Wrap });
             identity.Children.Add(new TextBlock { Text = (string.IsNullOrWhiteSpace(account.World) ? "World needs confirmation" : account.World) + " / " + (string.IsNullOrWhiteSpace(account.Profile) ? "Automatic / default profile" : account.Profile), Foreground = ThemeCatalog.BrushFor("Muted"), TextWrapping = TextWrapping.Wrap });
             header.Children.Add(identity);
-            var settings = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+            var settings = new WrapPanel { Name = "CharacterPolicies_" + account.Id.ToString("N"), Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             Grid.SetColumn(settings, 1);
             header.Children.Add(settings);
-            var autoToggle = new ToggleSwitch { Content = "Auto login", IsChecked = account.AutoLoginEnabled };
-            var maintainToggle = new ToggleSwitch { Content = "Maintain connection", IsChecked = account.MaintainConnection };
+            var autoToggle = new ToggleSwitch { Content = "Auto login", IsChecked = account.AutoLoginEnabled, Margin = new Thickness(0, 0, 12, 0) };
+            var maintainToggle = new ToggleSwitch { Content = "Maintain connection", IsChecked = account.MaintainConnection, Margin = new Thickness(0, 0, 12, 0) };
             settings.Children.Add(autoToggle);
             settings.Children.Add(maintainToggle);
-            var scheduleToggle = new ToggleSwitch { Content = "Schedule server maintenance", IsChecked = account.ScheduleMaintenance };
+            var scheduleToggle = new ToggleSwitch { Content = "Schedule server maintenance", IsChecked = account.ScheduleMaintenance, Margin = new Thickness(0, 0, 12, 0) };
             settings.Children.Add(scheduleToggle);
+            AddCharacterNotificationControls(settings, account);
             var updatingSchedule = false;
             scheduleToggle.IsCheckedChanged += (_, _) =>
             {
@@ -1116,15 +1120,23 @@ public sealed partial class MainWindow : Window
             verifiedGameSessions.Remove(account.Id);
             try
             {
-                var state = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new CharacterStateReader(data).Read(account, now);
                 var heartbeat = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new ShutdownIpc(data).ReadSession(account, now);
                 if (heartbeat != null && sessions.TryGetValue(account.Id, out var tracked) && heartbeat.RegisteredUtc < tracked.StartedUtc.AddSeconds(-2)) heartbeat = null;
-                var live = state != null && state.LoggedOutUtc == null && heartbeat?.Nonce == state.Nonce && now - state.ReportedUtc <= TimeSpan.FromSeconds(75);
-                if (live && data != null && sessions.TryGetValue(account.Id, out var process) &&
+                // Connection evidence is independent of optional display stats, including
+                // a temporarily unreadable stats file. Reuse the watchdog's report cache.
+                if (heartbeat != null && data != null && sessions.TryGetValue(account.Id, out var process) &&
                     serverTrafficCache.Read(data, account, process, heartbeat, now)?.IsRecent(now) == true)
                     verifiedGameSessions.Add(account.Id);
-                text.Text = !live && heartbeat != null ? "Current · Alive · player stats pending" :
-                    state?.Describe(live, includeEnvironment: false) ?? "Player data pending · deploy/reload FFXIManager";
+                var state = data == null || string.IsNullOrWhiteSpace(account.World) ? null : new CharacterStateReader(data).Read(account, now);
+                // A new session must not inherit the previous session's vitals or logout.
+                if (heartbeat != null && state?.Nonce != heartbeat.Nonce) state = null;
+                if (state?.LoggedOutUtc != null && heartbeat?.Nonce == state.Nonce)
+                    verifiedGameSessions.Remove(account.Id);
+                var live = state != null && state.LoggedOutUtc == null && heartbeat?.Nonce == state.Nonce && now - state.ReportedUtc <= TimeSpan.FromSeconds(75);
+                if (state != null)
+                    foreach (var alert in alertTracker.Observe(account, state, live)) QueueNotification(account, alert);
+                if (live && verifiedGameSessions.Contains(account.Id)) alertTracker.Recovered(account.Id);
+                text.Text = state?.Describe(live, includeEnvironment: false) ?? "Player stats pending";
                 if (characterWeather.TryGetValue(account.Id, out var weather))
                 {
                     weather.Children.Clear();
@@ -1228,8 +1240,8 @@ public sealed partial class MainWindow : Window
         }
         var validate = userInitiated || validateRecovery && account.MaintainConnection && WindowsLoginValidation.HasPriorValidation(dataRoot, account);
         var readiness = validate ? ManualLoginProblem(account) : autoLogin.ReadinessProblem(account);
-        if (readiness != null) { statuses[account.Id].Text = readiness; Log(account.Label + ": " + readiness); return; }
-        if (!vault.Contains(account.Id)) { statuses[account.Id].Text = "Auto login needs saved credentials"; return; }
+        if (readiness != null) { statuses[account.Id].Text = readiness; Log(account.Label + ": " + readiness); if (recovering) NotifyRecoveryFailure(account); return; }
+        if (!vault.Contains(account.Id)) { statuses[account.Id].Text = "Auto login needs saved credentials"; if (recovering) NotifyRecoveryFailure(account); return; }
         using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(shutdown.Token, autoLoginBatchStop?.Token ?? CancellationToken.None);
         accountCancellation[account.Id] = cancellation;
         UpdateSelectionControls();
@@ -1254,6 +1266,7 @@ public sealed partial class MainWindow : Window
             if (ex.Message == "Could not validate user name or password. Please check.") intentionallyStopped.Add(account.Id);
             nextRetry[account.Id] = DateTimeOffset.UtcNow.AddMinutes(5);
             Log(account.Label + ": login needs attention: " + ex.Message);
+            if (recovering) NotifyRecoveryFailure(account);
             if (ex.Message.StartsWith("POL-0008", StringComparison.Ordinal) && sessions.TryGetValue(account.Id, out var failed))
                 PauseExhaustedFriendRetries(account, failed);
         }
@@ -1424,6 +1437,7 @@ public sealed partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         { reason = "POL-0008: retry history could not be read; automatic recovery paused. POL remains open."; }
         if (reason == null) return false;
+        NotifyRecoveryFailure(account);
         connectionStates[account.Id] = reason;
         nextConnectionInspection[process] = DateTimeOffset.MaxValue;
         Log(account.Label + ": " + reason);
@@ -1548,10 +1562,12 @@ public sealed partial class MainWindow : Window
                     Log(account.Label + ": connection restored; character and world verified online.");
                     return true;
                 }
-                if (!windows.LastRecoveryNeedsRestart && platform.Inspect(process) != SessionHealth.Exited) return false;
+                if (!windows.LastRecoveryNeedsRestart && platform.Inspect(process) != SessionHealth.Exited)
+                { NotifyRecoveryFailure(account); return false; }
                 if (windows.LastInspectionCredentialRejected)
                 {
                     intentionallyStopped.Add(account.Id);
+                    NotifyRecoveryFailure(account);
                     Log(account.Label + ": login credentials were rejected; automatic restart paused.");
                     return true;
                 }
@@ -1589,6 +1605,7 @@ public sealed partial class MainWindow : Window
             nextConnectionInspection[process] = DateTimeOffset.UtcNow.AddMinutes(2);
             if (connectionStates.ContainsKey(account.Id)) connectionStates[account.Id] = "Disconnected · recovery paused: " + ex.Message;
             Log(account.Label + ": connection recovery paused. " + ex.Message);
+            NotifyRecoveryFailure(account);
             return false;
         }
         finally { connectionChecks.Remove(account.Id); accountCancellation.Remove(account.Id); UpdateSelectionControls(); }

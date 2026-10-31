@@ -7,6 +7,7 @@ void Check(bool condition, string label)
     passed++;
     Console.WriteLine("PASS: " + label);
 }
+NotificationRegression.Run(Check);
 GameUpdateRegression.Run(Check);
 FriendListRecoveryRegression.Run(Check);
 var trainingDirectory = Path.Combine(Path.GetTempPath(), "ffxi-training-" + Guid.NewGuid());
@@ -289,6 +290,21 @@ try
     File.WriteAllText(stem + ".jobs", jobsPayload);
     var environmentPayload = $"{sessionNonce}\nHauplibond\nOdin\n{now.AddMinutes(-1).ToUnixTimeSeconds()}\n{now.ToUnixTimeSeconds()}\n100\nRain\n1184\nFiresday\nWaxing Crescent\n25\n";
     File.WriteAllText(stem + ".environment", environmentPayload);
+    var inconsistentVitals = (statePayload + "0\n").Replace("\n0\n1500\n200\n500\n1\n", "\n3214\n2731\n830\n500\n0\n");
+    File.WriteAllText(stem + ".state", inconsistentVitals);
+    var currentWithOldMaximum = stateReader.Read(maintainedAccount, now);
+    Check(currentWithOldMaximum is { Hp: 3214, MaxHp: 2731, Mp: 830, MaxMp: 500, Jobs: not null, Environment: not null },
+        "lower cached maxima do not discard observed vitals, matching jobs or environment");
+    Check(currentWithOldMaximum!.Describe(true).Contains("HP 3214 (max unavailable) · MP 830 (max unavailable)"),
+        "inconsistent maximum is omitted without clamping HP/MP or inventing a maximum");
+    Check((currentWithOldMaximum with { MaxHp = 3214, MaxMp = 1074 }).Describe(true).Contains("HP 3214/3214 · MP 830/1074"),
+        "consistent maxima automatically resume normal vital display");
+    foreach (var invalid in new[] { inconsistentVitals.Replace("\n3214\n", "\n-1\n"), inconsistentVitals.Replace("\n3214\n", "\n2147483648\n"), inconsistentVitals.Replace("\n2731\n", "\n0\n"), inconsistentVitals.Replace("\n830\n", "\n-1\n") })
+    {
+        File.WriteAllText(stem + ".state", invalid);
+        Check(stateReader.Read(maintainedAccount, now) == null, "negative/overflow/incomplete vitals remain rejected");
+    }
+    File.WriteAllText(stem + ".state", statePayload + "0\n");
     Check(stateReader.Read(maintainedAccount, now)!.Describe(true).Contains("Weather: Rain · Vana’diel: 19:44 Firesday · Moon: Waxing Crescent (25%)"), "live zone weather game time and moon shown from matching report");
     foreach (var invalidEnvironment in new[] { environmentPayload.Replace(sessionNonce, "different_session"), environmentPayload.Replace("\n100\n", "\n101\n"), environmentPayload.Replace("\n1184\n", "\n1440\n"), environmentPayload.Replace("\n25\n", "\n101\n"), environmentPayload.Replace(now.ToUnixTimeSeconds().ToString(), now.AddSeconds(-1).ToUnixTimeSeconds().ToString()) })
     {

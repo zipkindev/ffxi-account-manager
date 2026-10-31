@@ -69,3 +69,9 @@ jobs:
         run: |
           mkdir -p /tmp/ffxi-manager-addon-test/data
           lua5.1 tests/test_manager_addon.lua /tmp/ffxi-manager-addon-test/
+          mkdir -p /tmp/ffxi-manager-maximum-test/data
+          lua5.1 tests/test_manager_maximums.lua /tmp/ffxi-manager-maximum-test/
+          for mode in missing cached failed; do
+            mkdir -p /tmp/ffxi-manager-progression-$mode/data
+            lua5.1 tests/test_manager_progression.lua /tmp/ffxi-manager-progression-$mode/ $mode
+          done
