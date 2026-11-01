@@ -1,5 +1,17 @@
 # Release notes
 
+## 1.0.44
+
+- Recognize the captured POL-1039 other-terminal dialog when addon panels obscure the opening words or insert text between wrapped message lines. Require the unique bounded code and both readable message anchors on two reads, then persist Maintain connection Off before local cleanup. Keep manual Launch anyway and reviewed login validations.
+- Correct the failure message when the code is readable but the supporting message is not. Add the real overlaid OCR capture as a regression fixture.
+- Include the initial-inspection pause and bounded error diagnostics from 1.0.43. Preserve explicit manual Launch anyway, saved recovery preferences and compatible full-login proofs.
+- Validate automatic detection, Maintain connection turning Off, the saved explanation and cleanup of only the affected local session against a live overlaid POL-1039. Confirm no restart for 90 seconds while three other games remain running. Build, 524 core checks, dashboard regressions and Windows safety checks pass.
+
+## 1.0.43
+
+- Persist a confirmed POL-1039 other-terminal pause during the initial two-read inspection, before acknowledging the dialog or requesting local cleanup. Keep Maintain connection off if POL closes or cleanup fails, while preserving the explicit manual Launch anyway override and existing reviewed login validations.
+- Record bounded error codes and an other-terminal-message match in screen timing diagnostics, without recognized text or credentials; log confirmed recovery codes in activity history. An obscured capture remains an unsuccessful read and cannot establish an external login.
+
 ## 1.0.42
 
 - Release the combined character-stat and notification updates: current/maximum EXP, merits, capacity and job points; optional Telegram bot setup with chat lookup, test delivery and encrypted token storage; custom event profiles and maintenance thresholds; per-character notification toggles beside the existing policies, with a dropdown only when custom profiles exist.

@@ -39,13 +39,17 @@ internal static class LoginFlowCompatibility
     // handling changed, but did not change credentials or character selection.
     // Only these exact build IDs may carry legacy proofs into this baseline;
     // a later login-source change automatically disables this bridge.
-    // Notification preferences and profile validation are the only changes to
-    // embedded login inputs in this revision; credential and recovery routes match.
-    private const string LegacyBaseline = "172A72FFDD972E983D42031D67E38ED84DC73700B512855640DD9071AC382EB5";
+    // This revision persists the other-terminal pause at the inspection boundary
+    // and recognizes two readable message anchors through an addon overlay.
+    // Credential/character selection inputs
+    // and the reviewed normal login route are unchanged.
+    private const string LegacyBaseline = "E81766D115BA420D173D92AA4248A2BF33FE49D5DC982E3CAF7F7F59EB0AC942";
     // The reviewed 1.0.29–1.0.35 normal credential and character routes remain.
     // This baseline adds bounded friend-list Retry without credential resubmission.
     internal static bool AcceptsPriorFlow(string? flow) => Current == LegacyBaseline &&
-        flow is "D29974099273A0D0B5F15F9405EDD20F6C7404F62722A974DFF67C488872E1E4" or
+        flow is "19984AD8C6D8CF8EB5D789720D26D4DE7FDC62D7F7214E9ED49B90CA8D7BDD92" or
+        "172A72FFDD972E983D42031D67E38ED84DC73700B512855640DD9071AC382EB5" or
+        "D29974099273A0D0B5F15F9405EDD20F6C7404F62722A974DFF67C488872E1E4" or
         "C3D0B849EBEE014687E01AC08CE403A0EC6A3AC658CDF2341B49F3D393CF96D9" or
         "52485999551FE825768BE1E6A7DECC53B5DD845F0752B8CB43C029CAC46179FA" or
         "E12AB56C4CD3CB2612585B619F2F3D8420F9412FEE653290A0BAD7F0D71A4527" or

@@ -504,7 +504,7 @@ public sealed partial class MainWindow : Window
             Grid.SetColumn(settings, 1);
             header.Children.Add(settings);
             var autoToggle = new ToggleSwitch { Content = "Auto login", IsChecked = account.AutoLoginEnabled, Margin = new Thickness(0, 0, 12, 0) };
-            var maintainToggle = new ToggleSwitch { Content = "Maintain connection", IsChecked = account.MaintainConnection, Margin = new Thickness(0, 0, 12, 0) };
+            var maintainToggle = new ToggleSwitch { Name = "MaintainConnection_" + account.Id.ToString("N"), Content = "Maintain connection", IsChecked = account.MaintainConnection, Margin = new Thickness(0, 0, 12, 0) };
             settings.Children.Add(autoToggle);
             settings.Children.Add(maintainToggle);
             var scheduleToggle = new ToggleSwitch { Content = "Schedule server maintenance", IsChecked = account.ScheduleMaintenance, Margin = new Thickness(0, 0, 12, 0) };
@@ -555,6 +555,7 @@ public sealed partial class MainWindow : Window
                 finally { updating = false; }
             }
             autoToggle.IsCheckedChanged += (_, _) => UpdatePolicy(autoToggle.IsChecked == true, autoToggle.IsChecked == true && maintainToggle.IsChecked == true);
+            Avalonia.Automation.AutomationProperties.SetAutomationId(maintainToggle, maintainToggle.Name);
             maintainToggle.IsCheckedChanged += (_, _) => UpdatePolicy(autoToggle.IsChecked == true || maintainToggle.IsChecked == true, maintainToggle.IsChecked == true);
             body.Children.Add(header);
             var schedule = new TextBlock { Name = "CharacterMaintenance_" + account.Id.ToString("N"), Foreground = ThemeCatalog.BrushFor("Muted"), TextWrapping = TextWrapping.Wrap };
@@ -1504,6 +1505,7 @@ public sealed partial class MainWindow : Window
                     await windows.RequestAsync(account, process, true, cancellation.Token);
                 }
                 var code = windows.LastInspectionErrorCode;
+                if (code != null) Log(account.Label + ": confirmed connection error " + code + ".");
                 if (code == "POL-1039")
                 {
                     await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: "external-exit");
@@ -1624,6 +1626,11 @@ public sealed partial class MainWindow : Window
         {
             await windows.RequestAsync(account, process, true, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
+            if (windows.LastInspectionErrorCode == "POL-1039")
+            {
+                await windows.RequestAsync(account, process, false, cancellation.Token, trainingSection: "external-exit");
+                return;
+            }
             var currentAccount = configuration.ConfiguredAccounts.FirstOrDefault(a => a.Id == account.Id);
             if (currentAccount == null || intentionallyStopped.Contains(account.Id) ||
                 !sessions.TryGetValue(account.Id, out var owned) || owned != process) return;

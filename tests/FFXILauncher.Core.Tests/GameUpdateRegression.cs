@@ -21,6 +21,12 @@ internal static class GameUpdateRegression
         check(LoginCheckpoints.MaintenanceErrorCode(Frame("Error code: FFXI-4001","Error code: POL-5311"))==null,"conflicting codes cannot authorize cleanup");
         var elsewhere=Frame("Error code: POL-1039","Disconnected from PlayOnline.","The current PlayOnline ID was used to log in from another terminal.","OK");
         check(LoginCheckpoints.IsExternalSessionConflict(elsewhere),"POL-1039 requires its specific other-terminal message");
+        var overlaidExternal = JsonSerializer.Deserialize<LoginFrame>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"Fixtures","overlaid-1039.json")))!;
+        check(LoginCheckpoints.MaintenanceErrorCode(overlaidExternal) == "POL-1039" && LoginCheckpoints.IsExternalSessionConflict(overlaidExternal),
+            "captured Hauplibond POL-1039 survives obscured current/disconnected text and panel words between message lines");
+        check(!LoginCheckpoints.IsExternalSessionConflict(Frame("POL-1039", "PlayOnline ID was used to log")) &&
+            !LoginCheckpoints.IsExternalSessionConflict(Frame("POL-1039", "another terminal")),
+            "external-terminal recognition requires both independent readable message anchors");
         check(!LoginCheckpoints.IsExternalSessionConflict(Frame("Error code: FFXI-3201","Same character is already logged in.")),"a temporary held character session does not disable recovery");
         check(!LoginCheckpoints.IsExternalSessionConflict(Frame("POL-1039","Unrelated HUD text")),"a bare 1039 code cannot authorize local session cleanup");
         check(!LoginCheckpoints.IsExternalSessionConflict(elsewhere with {Lines=elsewhere.Lines.Select(l=>l with {Words=l.Words.Select(w=>w with {Y=470}).ToArray()}).ToArray()}),"footer external-login text cannot authorize cleanup");

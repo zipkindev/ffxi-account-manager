@@ -277,8 +277,11 @@ public static class LoginCheckpoints
     // Addon panels can obscure "Error code" while leaving the actual code and
     // specific failure message readable. Require both; HUD text alone is not evidence.
     public static bool IsExternalSessionConflict(LoginFrame frame) =>
-        BoundedErrorCode(frame) == "POL-1039" && frame.Has("Disconnected from PlayOnline") &&
-        frame.Has("current PlayOnline ID was used to log in from another terminal");
+        // Panel overlays can replace "current" and insert their own labels
+        // between wrapped lines. Keep the unique bounded code and both readable
+        // message anchors; do not require one uninterrupted OCR sentence.
+        BoundedErrorCode(frame) == "POL-1039" && frame.Has("PlayOnline ID was used to log") &&
+        frame.Has("another terminal");
     public static string? NetworkDialogCode(LoginFrame frame) => BoundedErrorCode(frame) switch
     {
         "POL-0250" when frame.Has("No response from server") => "POL-0250",

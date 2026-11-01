@@ -19,6 +19,18 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
     public LoginCheckpoint? InspectedCheckpoint { get; private set; }
     public bool InspectedCredentialRejection { get; private set; }
     public string? InspectedErrorCode { get; private set; }
+    public bool InspectedExternalSessionConflict { get; private set; }
+    internal static bool PersistExternalSessionConflict(string root, AccountConfiguration expected, LoginFrame first, LoginFrame second)
+    {
+        if (!LoginCheckpoints.IsExternalSessionConflict(first) || !LoginCheckpoints.IsExternalSessionConflict(second)) return false;
+        var store = new ConfigurationStore(root);
+        var current = store.Load();
+        var target = current.ConfiguredAccounts.Single(a => a.Id == expected.Id);
+        if (target.PlayOnlineId != expected.PlayOnlineId || target.Character != expected.Character || target.World != expected.World)
+            throw new LoginSafetyException("The account mapping changed; external-session cleanup refused.");
+        store.Save(current with { Accounts = current.ConfiguredAccounts.Select(a => a.Id == expected.Id ? a.PauseForExternalSession() : a).ToList() });
+        return true;
+    }
     private bool recoveringDisconnect;
     private bool inspectionOnly, checkingExternalSession;
     public bool NeedsFreshRestart { get; private set; }
@@ -86,7 +98,9 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
         {
             if (!File.Exists(timingPath) || new FileInfo(timingPath).Length < 256000)
                 File.AppendAllText(timingPath, JsonSerializer.Serialize(new { CapturedUtc = DateTimeOffset.UtcNow, CaptureMs = captureMs,
-                    ReadMs = clock.ElapsedMilliseconds - captureMs, LoadingOnly = loadingOnly, ConfirmationOnly = confirmationOnly, Checkpoint = LoginCheckpoints.Recognize(frame).ToString() }) + "\n");
+                    ReadMs = clock.ElapsedMilliseconds - captureMs, LoadingOnly = loadingOnly, ConfirmationOnly = confirmationOnly,
+                    Checkpoint = LoginCheckpoints.Recognize(frame).ToString(), ErrorCode = LoginCheckpoints.MaintenanceErrorCode(frame),
+                    ExternalSessionMessage = LoginCheckpoints.IsExternalSessionConflict(frame) }) + "\n");
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
         if (!inspectionOnly && !checkingExternalSession && LoginCheckpoints.MaintenanceErrorCode(frame) == "POL-1039")
@@ -95,18 +109,13 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
             await Task.Delay(500, cancellation);
             var confirmed = await ReadFrame(cancellation);
             if (!LoginCheckpoints.IsExternalSessionConflict(frame) || !LoginCheckpoints.IsExternalSessionConflict(confirmed))
-                throw new LoginSafetyException("The external-login dialog changed; no button was pressed.");
+                throw new LoginSafetyException("POL-1039 was read, but its other-terminal message could not be confirmed twice. No button was pressed.");
             // Persist the user's policy before accepting the dialog or closing POL.
             // A worker/app failure must never turn this into an automatic restart.
             try
             {
                 var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher");
-                var store = new ConfigurationStore(root);
-                var current = store.Load();
-                var target = current.ConfiguredAccounts.Single(a => a.Id == account.Id);
-                if (target.PlayOnlineId != account.PlayOnlineId || target.Character != account.Character || target.World != account.World)
-                    throw new LoginSafetyException("The account mapping changed; external-session cleanup refused.");
-                store.Save(current with { Accounts = current.ConfiguredAccounts.Select(a => a.Id == account.Id ? a.PauseForExternalSession() : a).ToList() });
+                PersistExternalSessionConflict(root, account, frame, confirmed);
                 report(AccountConfiguration.ExternalSessionReason);
                 var dpi = WindowsLoginWindow.SetThreadDpiAwarenessContext(new(-4));
                 try
@@ -289,12 +298,20 @@ internal sealed partial class WindowsLoginEngine(string directory, LauncherConfi
                 // Cleanup needs the same actual POL/FFXI code twice, away
                 // from the chat footer; generic Error text is not sufficient.
                 var firstCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
+                var firstError = inspected;
                 await Task.Delay(500, cancellation);
                 inspected = await ReadFrame(cancellation);
                 var secondCode = LoginCheckpoints.MaintenanceErrorCode(inspected);
                 InspectedCheckpoint = firstCode != null && firstCode == secondCode ? LoginCheckpoint.Error : LoginCheckpoint.Unknown;
                 InspectedErrorCode = InspectedCheckpoint == LoginCheckpoint.Error ? firstCode : null;
                 InspectedCredentialRejection = InspectedCheckpoint == LoginCheckpoint.Error && LoginCheckpoints.IsCredentialRejection(inspected);
+                // Commit the pause at the confirmed read, before returning to the
+                // manager or starting a second helper request for local cleanup.
+                // Closing POL at either boundary must never authorize a restart.
+                InspectedExternalSessionConflict = PersistExternalSessionConflict(
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFXILauncher"),
+                    account, firstError, inspected);
+                if (InspectedExternalSessionConflict) report(AccountConfiguration.ExternalSessionReason);
             }
             else if (InspectedCheckpoint is LoginCheckpoint.Agreement or LoginCheckpoint.Title or LoginCheckpoint.Characters or LoginCheckpoint.CharacterConfirmation)
             {

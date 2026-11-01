@@ -16,6 +16,7 @@ using FFXILauncher.Desktop;
 if (args.Contains("--pol-sizing-test")) { NativePolSizing.Run(); return; }
 MaintenanceMonitorRegression.Run();
 FocusRecoveryRegression.Run();
+ExternalSessionInspectionRegression.Run();
 if (!WindowsLoginEngine.StopsAtCharacterSelection("continue", false, false) ||
     WindowsLoginEngine.StopsAtCharacterSelection("continue", true, false) ||
     !WindowsLoginEngine.StopsAtCharacterSelection("character", false, true) ||
